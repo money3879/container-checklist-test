@@ -1,0 +1,2900 @@
+<!DOCTYPE html>
+<html lang="zh-TW" style="background:#ffffff;color-scheme:light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>匯入並產生艙單</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root {
+  --cyan:  #1a7bbf;
+  --amber: #c07000;
+  --red:   #cc2222;
+  --green: #2e9e5b;
+  --txt:   #111111;
+  --txt2:  #444444;
+  --mono: 'SF Mono','Menlo','Consolas','Courier New',monospace;
+}
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent }
+html, body { overflow-x:hidden; font-size:16px }
+body {
+  background:#ffffff !important; color:#111111 !important;
+  font-family:-apple-system,'PingFang TC','Microsoft JhengHei',sans-serif;
+  color-scheme:light;
+}
+
+#top {
+  position:sticky; top:0; z-index:200;
+  background:#f2f4f6; border-bottom:2px solid var(--cyan);
+  padding:10px 14px;
+}
+.bar1 { display:flex; align-items:center; justify-content:space-between; gap:8px }
+.app-title { font-size:.95rem; font-weight:900; letter-spacing:2px; color:#1a5a8a }
+.tbtn {
+  border:1px solid rgba(0,0,0,.2); border-radius:6px; padding:7px 12px;
+  font-size:.78rem; font-weight:700; cursor:pointer; font-family:inherit;
+  background:#ffffff; color:#333333; white-space:nowrap;
+}
+
+main { padding:16px; padding-bottom:40px; max-width:960px; margin:0 auto }
+
+.step-section {
+  background:#ffffff; border:1px solid rgba(0,0,0,.12); border-radius:12px;
+  padding:16px; margin-bottom:14px;
+}
+.step-header { display:flex; align-items:center; gap:8px; margin-bottom:14px }
+.step-num {
+  width:24px; height:24px; border-radius:50%; background:var(--cyan); color:#fff;
+  font-size:.75rem; font-weight:800; display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+.step-title { font-size:.88rem; font-weight:800; color:var(--txt) }
+
+.field { margin-bottom:12px }
+.field label {
+  display:block; font-size:.72rem; font-weight:700; color:#444444;
+  letter-spacing:.5px; margin-bottom:6px;
+}
+.field input, .field select {
+  width:100%; padding:10px 12px; border:1.5px solid rgba(0,0,0,.15);
+  border-radius:8px; font-size:.88rem; font-family:inherit; color:#111111;
+  outline:none; background:#ffffff;
+}
+.field input:focus, .field select:focus { border-color:var(--cyan) }
+.field-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px }
+.field-row .field { margin-bottom:0; min-width:0 }
+.field-row .field input { width:100%; min-width:0; box-sizing:border-box }
+.field-row .field input[type="date"] { font-size:.82rem; padding:10px 8px }
+
+@media (max-width:400px) {
+  .field-row {
+    grid-template-columns: minmax(0,46%) minmax(0,46%);
+    justify-content: space-between;
+    gap: 0;
+  }
+  .field input, .field select {
+    width:100%;
+    box-sizing:border-box;
+    font-size:.80rem;
+    padding-left:7px;
+    padding-right:7px;
+  }
+  .field-row .field input[type="date"] {
+    font-size:.68rem;
+    padding-left:4px;
+    padding-right:4px;
+  }
+}
+.field-hint { font-size:.68rem; color:#999999; margin-top:4px }
+
+.ship-preview {
+  background:#f8f9fa; border-radius:8px; padding:10px 12px; margin-top:8px;
+  font-size:.76rem; color:#555555; line-height:1.7; display:none;
+}
+.ship-preview.show { display:block }
+.ship-preview b { color:var(--cyan) }
+
+.loc-card {
+  border:1.5px solid rgba(0,0,0,.12); border-radius:10px; padding:12px;
+  margin-bottom:10px; background:#fafbfc;
+}
+.loc-card-row { display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap }
+.loc-card-field { flex:1 1 160px; min-width:0 }
+.loc-card-field label {
+  display:block; font-size:.68rem; font-weight:700; color:#666666;
+  margin-bottom:5px; letter-spacing:.3px;
+}
+.loc-card-field input, .loc-card-field select {
+  width:100%; min-width:0; padding:9px 10px; border:1.5px solid rgba(0,0,0,.15);
+  border-radius:7px; font-size:.85rem; font-family:inherit; color:#111111;
+  outline:none; background:#ffffff; box-sizing:border-box;
+}
+.loc-card-field input:focus, .loc-card-field select:focus { border-color:var(--cyan) }
+.loc-remove-btn {
+  border:1.5px solid rgba(204,34,34,.3); background:#fdf0ef; color:var(--red);
+  font-size:.78rem; font-weight:700; cursor:pointer; padding:9px 14px;
+  border-radius:7px; white-space:nowrap; font-family:inherit; flex-shrink:0;
+}
+.loc-add-btn {
+  width:100%; padding:9px; border:1.5px dashed rgba(0,0,0,.2); border-radius:7px;
+  background:none; color:var(--cyan); font-size:.78rem; font-weight:700;
+  cursor:pointer; font-family:inherit; margin-top:4px;
+}
+
+.dzone {
+  border:2px dashed rgba(0,0,0,.15); border-radius:10px; padding:28px 16px;
+  text-align:center; cursor:pointer; transition:all .2s; margin-bottom:8px;
+}
+.dzone:hover, .dzone.drag-over { border-color:var(--cyan); background:rgba(26,123,191,.04) }
+.dzone .di { font-size:1.8rem; margin-bottom:6px }
+.dzone p { font-size:.8rem; color:#666666; margin:0 }
+.dzone strong { color:var(--cyan) }
+input[type="file"] { display:none }
+
+.file-loaded {
+  display:none; align-items:center; gap:10px; padding:12px 14px;
+  background:#eef7ee; border:1px solid rgba(46,158,91,.3); border-radius:8px;
+  font-size:.82rem; color:#1a7a3e; margin-bottom:8px;
+}
+.file-loaded.show { display:flex }
+.n-column-test {
+  margin-top:12px; border:1px solid rgba(26,123,191,.22); border-radius:10px;
+  background:#f7fbff; overflow:hidden; display:none;
+}
+.n-column-test.show { display:block }
+.n-column-test-head {
+  padding:10px 12px; border-bottom:1px solid rgba(26,123,191,.16);
+  font-size:.76rem; font-weight:800; color:#1a5a8a;
+}
+.n-column-test-note {
+  padding:9px 12px; font-size:.68rem; line-height:1.6; color:#666;
+}
+.n-column-test-scroll { overflow:auto; max-height:520px }
+.n-column-test table { width:100%; border-collapse:collapse; min-width:720px; font-size:.68rem }
+.n-column-test th, .n-column-test td {
+  border-top:1px solid rgba(0,0,0,.08); padding:7px 8px; vertical-align:top; text-align:left;
+}
+.n-column-test th { background:#eef6fc; color:#555; font-weight:800; position:sticky; top:0; z-index:1 }
+.n-column-test .n-raw { white-space:pre-wrap; line-height:1.5; word-break:break-word; color:#333 }
+.n-column-test .n-extracted { color:var(--cyan); font-weight:800; line-height:1.5; word-break:break-word }
+.n-column-test .n-match { line-height:1.5; word-break:break-word }
+.n-column-test .n-match.exact { color:#2e9e5b; font-weight:800 }
+.n-column-test .n-match.similar { color:#c17a00; font-weight:800 }
+.n-column-test .n-match.none { color:#cc2222; font-weight:800 }
+.n-column-test .n-match small { display:block; margin-top:3px; color:#777; font-weight:400 }
+.n-column-test .n-candidate { margin-top:4px; padding:5px 7px; border-radius:6px; background:#fff; border:1px solid rgba(193,122,0,.2); color:#555; font-weight:600 }
+.n-column-test .n-candidate b { color:#9a6100 }
+
+.btn-primary {
+  width:100%; padding:13px; background:var(--cyan); color:#fff; border:none;
+  border-radius:8px; font-size:.9rem; font-weight:800; cursor:pointer; font-family:inherit;
+}
+.btn-primary:disabled { background:#cccccc; cursor:not-allowed }
+
+.error-box {
+  background:#fdf0ef; border:1px solid rgba(204,34,34,.3); border-radius:8px;
+  padding:12px 14px; margin-top:10px; font-size:.8rem; color:var(--red); line-height:1.6;
+  display:none;
+}
+.error-box.show { display:block }
+.error-box ul { margin:6px 0 0 18px }
+
+
+.excel-preview-wrap { overflow:auto; border:1px solid rgba(0,0,0,.14); border-radius:8px; background:#dfe3e8; padding:14px; }
+.excel-preview-page { display:inline-block; background:#fff; box-shadow:0 1px 5px rgba(0,0,0,.16); }
+.excel-preview-real { border-collapse:collapse; table-layout:fixed; font-family:Arial,"Noto Sans TC",sans-serif; background:#fff; }
+.excel-preview-real td { box-sizing:border-box; padding:1px 3px; overflow:hidden; line-height:1.15; }
+
+#preview-section { display:none }
+#preview-section.show { display:block }
+
+.loc-tabs { display:flex; gap:6px; margin-bottom:14px; overflow-x:auto; flex-wrap:wrap }
+.loc-tab {
+  padding:8px 14px; border-radius:8px; border:1.5px solid rgba(0,0,0,.15);
+  background:#ffffff; color:#555555; font-size:.8rem; font-weight:700;
+  cursor:pointer; white-space:nowrap; font-family:inherit;
+}
+.loc-tab.active { border-color:var(--cyan); background:rgba(26,123,191,.08); color:var(--cyan) }
+
+.view-toggle { display:flex; gap:6px; margin-bottom:14px }
+.view-btn {
+  flex:1; padding:9px; border:1.5px solid rgba(0,0,0,.15); border-radius:8px;
+  background:#ffffff; color:#555555; font-size:.78rem; font-weight:700;
+  cursor:pointer; font-family:inherit;
+}
+.view-btn.active { border-color:var(--cyan); background:rgba(26,123,191,.08); color:var(--cyan) }
+
+.preview-stats { display:flex; gap:16px; margin-bottom:12px; font-size:.82rem; color:#444444; flex-wrap:wrap }
+.preview-stats b { color:var(--cyan); font-size:1rem }
+
+.table-scroll { overflow-x:auto; border:1px solid rgba(0,0,0,.12); border-radius:8px }
+table.tbl-view { width:100%; border-collapse:collapse; font-size:.72rem; min-width:900px }
+table.tbl-view thead th {
+  background:#e8ecf0; color:#222222; font-weight:800; padding:8px 6px; text-align:left;
+  white-space:nowrap; border-bottom:2px solid var(--cyan); position:sticky; top:0;
+}
+table.tbl-view td {
+  padding:7px 6px; border-bottom:1px solid rgba(0,0,0,.08); color:#111111;
+  white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis;
+}
+table.tbl-view tbody tr:nth-child(even) { background:#f8f9fa }
+.cell-mono { font-family:var(--mono) }
+.cell-wide { white-space:normal !important; max-width:280px }
+
+.excel-view-wrap { overflow-x:auto; border:1px solid rgba(0,0,0,.2); border-radius:4px }
+table.excel-view { border-collapse:collapse; font-size:.68rem; font-family:'PingFang TC','Microsoft JhengHei',var(--mono); min-width:1050px }
+table.excel-view td, table.excel-view th {
+  border:1px solid #666666; padding:5px 6px; white-space:pre-wrap; vertical-align:middle;
+  font-size:.66rem; text-align:center; line-height:1.4;
+}
+table.excel-view th { background:#e2e9f0; font-weight:700; text-align:center; font-size:.62rem }
+table.excel-view tbody:first-of-type td { text-align:center; font-size:.68rem }
+
+.export-bar { display:flex; gap:10px; margin-top:16px }
+.btn-export {
+  flex:1; padding:13px; background:var(--green); color:#fff; border:none;
+  border-radius:8px; font-size:.9rem; font-weight:800; cursor:pointer; font-family:inherit;
+}
+.btn-back {
+  padding:13px 18px; background:none; border:1px solid rgba(0,0,0,.2);
+  border-radius:8px; font-size:.85rem; color:#555555; cursor:pointer; font-family:inherit;
+}
+</style>
+</head>
+<body>
+
+<div id="top">
+  <div class="bar1">
+    <span class="app-title">📥 匯入並產生艙單</span>
+    <button class="tbtn" onclick="location.href='manifest.html'">← 返回艙單系統</button>
+  </div>
+</div>
+
+<main>
+
+  <div class="step-section">
+    <div class="step-header">
+      <div class="step-num">1</div>
+      <div class="step-title">船舶與航次資訊</div>
+    </div>
+
+    <div class="field">
+      <label>選擇一程船（從大陸進口）*</label>
+      <select id="f-ship-select" onchange="onShipSelect()">
+        <option value="">請選擇一程船…</option>
+      </select>
+      <div class="ship-preview" id="ship-preview"></div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>船隻掛號 *</label>
+        <input type="text" id="f-registration" placeholder="例如 15PAHD" oninput="this.value=this.value.toUpperCase()">
+      </div>
+      <div class="field">
+        <label>航次 *</label>
+        <input type="text" id="f-voyage" placeholder="例如 260727">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>時間 *</label>
+        <input type="text" id="f-arrival-date" class="roc-date-input" inputmode="numeric" maxlength="10" placeholder="例如 115/08/25" autocomplete="off" oninput="formatRocDateInput(this)" onblur="normalizeRocDateInput(this)">
+      </div>
+      <div class="field">
+        <label>申請日期 *</label>
+        <input type="text" id="f-mooring-date" class="roc-date-input" inputmode="numeric" maxlength="10" placeholder="例如 115/08/25" autocomplete="off" oninput="formatRocDateInput(this)" onblur="normalizeRocDateInput(this)">
+      </div>
+    </div>
+  </div>
+
+  <div class="step-section">
+    <div class="step-header">
+      <div class="step-num">2</div>
+      <div class="step-title">卸存地</div>
+    </div>
+    <div id="loc-list"></div>
+    <button class="loc-add-btn" onclick="addLocationInput()">＋ 新增卸存地</button>
+  </div>
+
+  <div class="step-section">
+    <div class="step-header">
+      <div class="step-num">3</div>
+      <div class="step-title">上傳原始 Excel</div>
+    </div>
+
+    <div class="dzone" id="dzone" onclick="document.getElementById('fi').click()"
+      ondragover="dOver(event)" ondragleave="dLeave()" ondrop="dDrop(event)">
+      <div class="di">📂</div>
+      <p>點此選檔案<br><strong>或拖曳 Excel 到此</strong></p>
+    </div>
+    <input type="file" id="fi" accept=".xlsx,.xls,.csv" onchange="fileSel(this)">
+
+    <div class="file-loaded" id="file-loaded">
+      <span>✅</span>
+      <span id="file-loaded-text"></span>
+    </div>
+
+    <!-- N 欄是診斷測試；T6 實際命中結果請看下面的「T6 實際艙單匹配測試」。 -->
+    <div class="n-column-test" id="n-column-test">
+      <div class="n-column-test-head">🔎 第一階段：大陸 Excel「N 欄」讀取測試</div>
+      <div class="n-column-test-note" id="n-column-test-note"></div>
+      <div class="n-column-test-scroll">
+        <table>
+          <thead>
+            <tr><th>Excel 資料列</th><th>N 欄原始內容</th><th>解析出的台灣通知人公司名稱</th><th>Supabase 比對結果 / 相似候選</th></tr>
+          </thead>
+          <tbody id="n-column-test-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- T6 實際命中測試：這裡才是「收貨人＋卸存地」對 DB 的真正匹配結果；N 欄只作診斷。 -->
+    <div class="n-column-test" id="t6-consignee-test">
+      <div class="n-column-test-head">🎯 T6 實際艙單匹配測試：收貨人＋卸存地 → Supabase</div>
+      <div class="n-column-test-note" id="t6-consignee-test-note"></div>
+      <div class="n-column-test-scroll">
+        <table>
+          <thead>
+            <tr><th>Excel 資料列</th><th>收貨人原始內容</th><th>解析後收貨人</th><th>卸存地</th><th>實際命中 DB</th><th>T6 最終台灣通知人</th></tr>
+          </thead>
+          <tbody id="t6-consignee-test-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-primary" id="btn-generate" onclick="generatePreview()">產生艙單預覽</button>
+
+  <div class="error-box" id="error-box"></div>
+
+  <div id="preview-section">
+    <div class="step-section" style="margin-top:14px">
+      <div class="step-header">
+        <div class="step-num">4</div>
+        <div class="step-title">艙單預覽</div>
+      </div>
+
+      <div class="loc-tabs" id="loc-tabs"></div>
+
+      <div class="view-toggle">
+        <button class="view-btn active" id="view-btn-table" onclick="switchView('table')">📋 表格檢視</button>
+        <button class="view-btn" id="view-btn-excel" onclick="switchView('excel')">📑 艙單版面檢視</button>
+      </div>
+
+      <div class="preview-stats">
+        <span>共 <b id="stat-total">0</b> 筆貨物</span>
+        <span>艙號範圍 <b id="stat-range">—</b></span>
+      </div>
+
+      <div id="view-table">
+        <div class="table-scroll">
+          <table class="tbl-view">
+            <thead>
+              <tr>
+                <th>主提單號碼</th><th>艙單號碼</th><th>件數</th><th>單位</th>
+                <th>標記/追蹤號</th><th>貨名</th><th>毛重</th>
+                <th>收貨人簡稱</th><th>收貨人資訊</th>
+              </tr>
+            </thead>
+            <tbody id="preview-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="view-excel" style="display:none">
+        <div class="excel-view-wrap">
+          <table class="excel-view" id="excel-preview-table"></table>
+        </div>
+      </div>
+
+      <div class="export-bar">
+        <button class="btn-back" onclick="backToEdit()">← 返回修改</button>
+        <button class="btn-export" onclick="exportManifest()">📤 匯出目前卸存地的艙單 Excel</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const TEMPLATE_PATH = './template.xlsx';
+const SB_URL = 'https://ruziacdggdfyvlbcjnan.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1emlhY2RnZ2RmeXZsYmNqbmFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NzE1OTEsImV4cCI6MjEwMDQ0NzU5MX0.3P7SzY2EfKtUTcuaBB0fMY0FOIdp_X3KmkfRnL8wuSg';
+
+(function checkAuth() {
+  const saved = localStorage.getItem('ctr-auth') || sessionStorage.getItem('ctr-auth');
+  if (!saved) { window.location.replace('index.html'); return; }
+  try {
+    const auth = JSON.parse(saved);
+    if (!auth || !auth.username) throw new Error('invalid');
+    window._currentUser = auth.username;
+  } catch(e) {
+    window.location.replace('index.html');
+  }
+})();
+
+let ships = [];
+let consignees = [];
+let uploadedRows = null;
+let nColumnTestRows = [];
+let manifestByLocation = {};
+let currentLocationTab = null;
+let currentView = 'table';
+
+const CONTAINER_TYPE_MAP = {
+  '40HC': '45G1',
+  '20GP': '22G1',
+  "1X20'GP": '22G1',
+  '1X20GP': '22G1',
+  '1X20 GP': '22G1',
+  "1X40'HC": '45G1',
+  '1X40HC': '45G1',
+  '1X40 HC': '45G1'
+};
+
+function mapContainerTypeForManifest(rawType) {
+  const original = String(rawType || '').trim().toUpperCase();
+  if (!original) return '';
+  if (CONTAINER_TYPE_MAP[original]) return CONTAINER_TYPE_MAP[original];
+
+  // 容許 Excel 將數量、尺寸與型式寫成「1X20'GP」等格式，統一轉成艙單櫃型代碼。
+  const normalized = original
+    .replace(/[’‘′＇]/g, "'")
+    .replace(/\s+/g, '');
+  if (/^1X20'?GP$/.test(normalized) || /^20'?GP$/.test(normalized)) return '22G1';
+  if (/^1X40'?HC$/.test(normalized) || /^40'?HC$/.test(normalized)) return '45G1';
+  return String(rawType || '').trim();
+}
+
+async function init() {
+  try {
+    const [shipsRes, consigneesRes] = await Promise.all([
+      fetch(`${SB_URL}/rest/v1/ships?select=*&order=ship_name.asc`, {
+        headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+      }),
+      fetch(`${SB_URL}/rest/v1/consignees?select=*`, {
+        headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+      })
+    ]);
+    ships = await shipsRes.json();
+    consignees = await consigneesRes.json();
+
+    const sel = document.getElementById('f-ship-select');
+    ships.filter(s => (s.ship_type || '一程船') === '一程船').forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.ship_name;
+      sel.appendChild(opt);
+    });
+  } catch(e) {
+    console.error('初始化載入失敗', e);
+  }
+  addLocationInput();
+  renderT6ConsigneeDbTest();
+  renderNColumnTest();
+}
+
+function onShipSelect() {
+  const id = document.getElementById('f-ship-select').value;
+  const preview = document.getElementById('ship-preview');
+  if (!id) { preview.classList.remove('show'); return; }
+  const s = ships.find(x => x.id === id);
+  if (!s) return;
+  preview.innerHTML = `
+    <div style="margin-bottom:4px">船舶呼號：<b>${s.call_sign || '—'}</b></div>
+    <div style="margin-bottom:4px">船長姓名：<b>${s.captain_name || '—'}</b></div>
+    <div>總/淨噸數：<b>${s.gross_net_tonnage || '—'}</b></div>`;
+  preview.classList.add('show');
+}
+
+let locCounter = 0;
+function addLocationInput(value) {
+  locCounter++;
+  const id = `loc-input-${locCounter}`;
+  const wrap = document.createElement('div');
+  wrap.className = 'loc-card';
+  wrap.id = `wrap-${id}`;
+
+  wrap.innerHTML = `
+    <div class="loc-card-row">
+      <div class="loc-card-field">
+        <label>卸存地</label>
+        <input type="text" id="${id}" placeholder="例如 KHH0638S" style="text-transform:uppercase" value="${value||''}">
+      </div>
+      <div class="loc-card-field">
+        <label>二程船（回台灣）</label>
+        <input type="text" id="${id}-ship2" placeholder="例如 大佑輪">
+      </div>
+      <button class="loc-remove-btn" onclick="removeLocationInput('${id}')">🗑 刪除</button>
+    </div>
+  `;
+  document.getElementById('loc-list').appendChild(wrap);
+}
+function removeLocationInput(id) {
+  const wrap = document.getElementById(`wrap-${id}`);
+  if (wrap) wrap.remove();
+}
+function getLocationInputs() {
+  const wraps = Array.from(document.querySelectorAll('.loc-card'));
+  return wraps.map(wrap => {
+    const locInput = wrap.querySelector('input[id]:not([id$="-ship2"])');
+    const ship2Input = wrap.querySelector('input[id$="-ship2"]');
+    return {
+      location: normalizeLocationCode(locInput.value),
+      ship2Name: ship2Input.value.trim()
+    };
+  }).filter(x => x.location);
+}
+
+function dOver(e) { e.preventDefault(); document.getElementById('dzone').classList.add('drag-over'); }
+function dLeave() { document.getElementById('dzone').classList.remove('drag-over'); }
+function dDrop(e) { e.preventDefault(); dLeave(); if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]); }
+function fileSel(inp) { if (inp.files[0]) readFile(inp.files[0]); }
+
+function readFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'binary' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      if (!json.length) { showError(['檔案沒有資料']); return; }
+
+      // 第一階段只另外讀取 Excel 的第 14 欄（N 欄），不改動既有 uploadedRows。
+      const matrix = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+      const dataRows = matrix.slice(1);
+      nColumnTestRows = dataRows.map((row, index) => {
+        const rawN = String(row[13] ?? '').trim(); // N 欄 = 第 14 欄，0-based index 為 13
+        const extractedName = extractNotifyCompanyName(rawN);
+        return { excelRow: index + 2, rawN, extractedName };
+      }).filter(x => x.rawN);
+
+      // 保留每筆資料原始 Excel N 欄，供後續「收貨人＋卸存地」命中後，
+      // 在非 T6 的多筆同收貨人/同卸存地下再用台灣通知人選出正確 DB 資料。
+      json.forEach((row, index) => {
+        row.__excelRow = index + 2;
+        row.__rawTaiwanNotify = String(dataRows[index]?.[13] ?? '').trim();
+      });
+
+      uploadedRows = json;
+      document.getElementById('file-loaded-text').textContent = `已載入 ${file.name}（共 ${json.length} 筆資料）`;
+      document.getElementById('file-loaded').classList.add('show');
+      renderNColumnTest();
+      renderT6ConsigneeDbTest();
+    } catch(err) {
+      nColumnTestRows = [];
+      document.getElementById('n-column-test').classList.remove('show');
+      showError(['檔案讀取失敗，請確認格式是否正確']);
+    }
+  };
+  reader.readAsBinaryString(file);
+}
+
+// 第二階段：N 欄公司名稱與 Supabase 的 taiwan_notify_name 比對。
+// 先把 N 欄中的公司名稱從地址、統編、電話等後續資訊切出來，
+// 再做格式標準化完全比對；完全比對不到時，再提供相似度候選。
+function extractNotifyCompanyName(rawValue) {
+  // N 欄可能包含統編、公司名稱、地址、電話、Email，甚至把內容黏成一整段。
+  // 先做 Unicode/空白清理，再逐行尋找公司名稱；找不到法律後綴時再用公司關鍵字判斷。
+  let raw = String(rawValue || '')
+    .replace(/\uFEFF/g, '')
+    .replace(/[\u200B-\u200D\u2060]/g, '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u00A0\u3000]/g, ' ')
+    .trim();
+  if (!raw) return '';
+
+  const legalSuffix = /(?:CO\.?\s*,?\s*LTD\.?|LTD\.?|LIMITED|INCORPORATED|INC\.?|CORPORATION|CORP\.?|COMPANY)(?=$|[^A-Z])/i;
+  const companyHint = /(?:LOGISTICS|EXPRESS|CUSTOMS|FORWARDING|SERVICE|TRANSPORT|AIR|SUPPLY|WORLDWIDE|INTERNATIONAL|INTL|BROKER|SHIPPING|TRADING|CARGO)/i;
+
+  // 處理「公司名稱 + 地址」全部在同一行的情況，例如 LTD5F、LTD.,NO.209...
+  const cleanLine = line => String(line || '')
+    .replace(/[\u00A0\u3000]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const lines = raw.split('\n').map(cleanLine).filter(Boolean);
+
+  const isNoiseLine = line => {
+    const compact = line.replace(/\s+/g, '');
+    if (/^#?\d{6,}$/.test(compact)) return true;
+    if (/^(?:統編|統一編號|TAX(?:\s*ID)?|ID)\s*[:：#]?\s*\d+/i.test(line)) return true;
+    if (/^(TEL|FAX|EMAIL|MAIL|ATTN|PHONE|MOBILE|E-MAIL)\s*[:：+]?/i.test(line)) return true;
+    if (/^(https?:\/\/|www\.)/i.test(line)) return true;
+    if (/^(RM\.?|ROOM|FLOOR|FL\.?|NO\.?\s*\d|SEC\.?\s*\d|LANE|LN\.?|RD\.?|ROAD|ST\.?|STREET|\d+F\b)/i.test(line)) return true;
+    if (/^(?:TEL|FAX|EMAIL|MAIL)\b/i.test(compact)) return true;
+    return false;
+  };
+
+  // 第一輪：優先抓有法律後綴的公司名稱。
+  for (const line of lines) {
+    if (isNoiseLine(line)) continue;
+    const match = line.match(legalSuffix);
+    if (match && typeof match.index === 'number') {
+      return line.slice(0, match.index + match[0].length).trim();
+    }
+  }
+
+  // 第二輪：沒有標準法律後綴時，用公司業務關鍵字判斷。
+  const hinted = lines.find(line => !isNoiseLine(line) && companyHint.test(line));
+  if (hinted) return hinted.trim();
+
+  // 第三輪：如果原始內容沒有換行，嘗試從統編/電話/地址等標記切出第一段。
+  const compactRaw = raw.replace(/\s*\n\s*/g, ' ');
+  const fallback = compactRaw.match(/^(?:#?\d{6,}\s*)?(.+?)(?=\s+(?:\d+F\.?|NO\.?\s*\d|TEL\b|FAX\b|EMAIL\b|MAIL\b|https?:\/\/)|$)/i);
+  if (fallback && fallback[1] && !/^#?\d{6,}$/.test(fallback[1].trim())) {
+    return fallback[1].trim();
+  }
+
+  return lines.find(line => !isNoiseLine(line)) || '';
+}
+function normalizeNotifyName(value) {
+  let s = String(value || '').toUpperCase().trim();
+  s = s.replace(/[’‘′＇]/g, "'");
+  // 常見 OCR／人工輸入錯字：把容易混淆的法律後綴統一。
+  // 例如 LINITED → LIMITED、CORPORATlON → CORPORATION。
+  s = s.replace(/LI[MN]ITED/g, 'LIMITED');
+  s = s.replace(/LIMLTED/g, 'LIMITED');
+  s = s.replace(/LIMlTED/g, 'LIMITED');
+  s = s.replace(/CORPORATlON/g, 'CORPORATION');
+  s = s.replace(/[.,，。、;；:：'"`]/g, '');
+  s = s.replace(/[()（）\[\]{}]/g, '');
+  s = s.replace(/[\s_\-\/\\]+/g, '');
+  s = s.replace(/LIMITEDLIABILITYCOMPANY/g, 'LLC');
+  s = s.replace(/LIMITEDCOMPANY/g, 'LTD');
+  s = s.replace(/LIMITED/g, 'LTD');
+  s = s.replace(/CORPORATION/g, 'CORP');
+  s = s.replace(/INCORPORATED/g, 'INC');
+  // INT'L / INTL 與 INTERNATIONAL 視為同一種公司名稱寫法，
+  // 例如 JIN XIN 260903A(1).xls 的 PGL PACIFIC GLORY INT'L...
+  // 對應 DB 的 PGL PACIFIC GLORY INTERNATIONAL...。
+  s = s.replace(/INTERNATIONAL/g, 'INTL');
+  s = s.replace(/INTL/g, 'INTL');
+  return s;
+}
+
+// 將原始 Excel 的卸存地整理成資料庫使用的代碼。
+// 例如「专区代码003C2031」「专区代碼TPEN051S 」都會整理成 003C2031 / TPEN051S。
+function normalizeLocationCode(value) {
+  let s = String(value || '').toUpperCase().trim();
+  if (!s) return '';
+  s = s.replace(/\s+/g, '');
+  const zoneMatch = s.match(/(?:专区代码|专区代碼)([A-Z0-9]+)$/i);
+  if (zoneMatch) return zoneMatch[1].toUpperCase();
+  // 若前面還有其他文字，優先取最後一段連續的英數代碼。
+  const tailMatch = s.match(/([A-Z0-9]+)$/);
+  return tailMatch ? tailMatch[1].toUpperCase() : s;
+}
+
+function normalizeConsigneeName(value) {
+  let s = String(value || '').toUpperCase().trim();
+  s = s.replace(/[’‘′＇]/g, "'");
+  // 與台灣通知人相同：LINITED / LIMITED 視為同一家公司名稱，
+  // 用於處理大陸文件的 LIMITED 與資料庫既有 LINITED 拼法差異。
+  s = s.replace(/LI[MN]ITED/g, 'LIMITED');
+  // 收貨人名稱比對忽略標點、空白、連字號與常見公司法律後綴寫法。
+  s = s.replace(/[.,，。、;；:：'"`]/g, '');
+  s = s.replace(/[()（）\[\]{}]/g, '');
+  s = s.replace(/[\s_\-\/\\]+/g, '');
+  s = s.replace(/LIMITEDLIABILITYCOMPANY/g, 'LLC');
+  s = s.replace(/LIMITEDCOMPANY/g, 'LTD');
+  s = s.replace(/LIMITED/g, 'LTD');
+  s = s.replace(/CORPORATION/g, 'CORP');
+  s = s.replace(/INCORPORATED/g, 'INC');
+  // INT'L / INT’L / INTL / INTERNATIONAL 視為同一寫法。
+  s = s.replace(/INTERNATIONAL/g, 'INTL');
+  s = s.replace(/INTL/g, 'INTL');
+  return s;
+}
+
+// 判斷「台灣通知人」是否就是同一個收貨人。
+// 比對時沿用既有的名稱正規化規則，忽略公司名稱常見的標點、空白、
+// INTERNATIONAL / INT'L、CORPORATION / CORP、LIMITED / LTD 等寫法差異。
+function isSameConsigneeAndTaiwanNotify(consigneeName, taiwanNotifyName) {
+  const consignee = normalizeConsigneeName(consigneeName);
+  const notify = normalizeNotifyName(taiwanNotifyName);
+  return !!consignee && !!notify && consignee === notify;
+}
+
+// 專門處理「收貨人」欄位。不要與 N 欄台灣通知人的解析混用，
+// 因為收貨人是所有艙單資料的第一優先鍵。
+// 從收貨人原始欄位抓出可能存在的統編，用來驗證「收貨人＋卸存地」解析結果。
+// 規則仍然是先以「收貨人＋卸存地」找 DB；統編只在名稱解析結果需要驗證/消歧時使用。
+function extractConsigneeTaxId(rawValue) {
+  const raw = String(rawValue || '').replace(/\s+/g, ' ').trim();
+  const m = raw.match(/(?:^|[^0-9])#?([0-9]{8})(?=$|[^0-9])/);
+  return m ? m[1] : '';
+}
+
+function extractConsigneeCompanyName(rawValue) {
+  let raw = String(rawValue || '')
+    .replace(/\uFEFF/g, '')
+    .replace(/[\u200B-\u200D\u2060]/g, '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u00A0\u3000]/g, ' ')
+    .trim();
+  if (!raw) return '';
+
+  const legalSuffix = /(?:CO\.?\s*,?\s*LTD\.?|LTD\.?|LIMITED|INCORPORATED|INC\.?|CORPORATION|CORP\.?|COMPANY)(?=$|[^A-Z])/i;
+  // 有些 Excel 會把「#統編 / 公司名稱」放在同一行，例如：
+  // 「#24951752 / JET-F WORLDWIDE EXPRESS CO., LTD.」。
+  // 先移除最前面的統編與分隔符，避免統編被一起拿去做收貨人名稱比對。
+  raw = raw.replace(/^#?\d{6,}\s*(?:[/／|｜、，,;；:]\s*)?/i, '').trim();
+  const lines = raw.split('\n').map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
+
+  // 收貨人常見格式：#統編在第一行，公司名稱在第二行；或統編與公司名同一行。
+  for (const line of lines) {
+    if (/^#?\d{6,}$/.test(line.replace(/\s+/g, ''))) continue;
+    const m = line.match(legalSuffix);
+    if (m && typeof m.index === 'number') return line.slice(0, m.index + m[0].length).trim();
+  }
+
+  // 若沒有法律後綴，取第一個不是統編的非空行；這仍比拿整段「統編+公司名」安全。
+  const firstUseful = lines.find(line => !/^#?\d{6,}$/.test(line.replace(/\s+/g, '')));
+  return firstUseful || '';
+}
+
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({length:n+1}, (_,i)=>i);
+  for (let i=1;i<=m;i++) {
+    const cur = [i];
+    for (let j=1;j<=n;j++) {
+      cur[j] = Math.min(
+        cur[j-1] + 1,
+        prev[j] + 1,
+        prev[j-1] + (a[i-1] === b[j-1] ? 0 : 1)
+      );
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+function bigramSimilarity(a, b) {
+  if (a === b) return 1;
+  if (a.length < 2 || b.length < 2) return a === b ? 1 : 0;
+  const make = s => {
+    const set = new Set();
+    for (let i=0;i<s.length-1;i++) set.add(s.slice(i,i+2));
+    return set;
+  };
+  const A = make(a), B = make(b);
+  let inter = 0;
+  A.forEach(x => { if (B.has(x)) inter++; });
+  return (2 * inter) / (A.size + B.size);
+}
+
+function notifySimilarity(aRaw, bRaw) {
+  const a = normalizeNotifyName(aRaw);
+  const b = normalizeNotifyName(bRaw);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length > b.length ? a : b;
+  const containment = shorter.length >= 8 && longer.includes(shorter) ? shorter.length / longer.length : 0;
+  const edit = 1 - (levenshtein(a, b) / Math.max(a.length, b.length));
+  const bi = bigramSimilarity(a, b);
+  return Math.max(containment, edit * 0.7 + bi * 0.3);
+}
+
+function getNotifyMatches(name) {
+  if (!name || !Array.isArray(consignees) || !consignees.length) return {exact:[], candidates:[], byConsignee:[]};
+  const normalized = normalizeNotifyName(name);
+  const exact = consignees.filter(c => normalizeNotifyName(c.taiwan_notify_name) === normalized);
+  if (exact.length) return { exact, candidates: [], byConsignee: [] };
+
+  // 有些 Excel 的 N 欄會直接寫「收貨人公司名稱」，而 DB 該筆資料的
+  // taiwan_notify_name 可能是另一家公司。此時用收貨人名稱作第二層精確對應，
+  // 避免像 PGL 這種資料被誤判成「完全找不到」。
+  const byConsignee = consignees.filter(c => normalizeConsigneeName(c.name) === normalized);
+  if (byConsignee.length) return { exact: [], candidates: [], byConsignee };
+
+  const candidates = consignees
+    .filter(c => String(c.taiwan_notify_name || '').trim())
+    .map(c => ({ consignee:c, score:notifySimilarity(name, c.taiwan_notify_name) }))
+    .filter(x => x.score >= 0.68)
+    .sort((a,b) => b.score - a.score)
+    .slice(0,3);
+  return { exact:[], candidates, byConsignee:[] };
+}
+
+function renderNotifyMatch(item) {
+  if (!Array.isArray(consignees) || !consignees.length) {
+    return '<div class="n-match wait">⏳ Supabase 收貨人資料尚未載入</div>';
+  }
+  const result = getNotifyMatches(item.extractedName);
+  if (result.exact.length) {
+    return `<div class="n-match exact">✅ 完全符合（${result.exact.length} 筆）<small>${escapeHtml(result.exact[0].taiwan_notify_name)}</small></div>`;
+  }
+  if (result.byConsignee.length) {
+    const html = result.byConsignee.map(c => `<div class="n-candidate">以收貨人名稱精確對應<br>${escapeHtml(c.name)}<small>此筆 DB 的台灣通知人：${escapeHtml(c.taiwan_notify_name || '（未設定）')}</small></div>`).join('');
+    return `<div class="n-match similar">🟡 N 欄名稱與 DB 收貨人名稱相符${html}<small>若為 T6 資料，實際艙單直接使用這筆 DB 的「台灣通知人」；N 欄比對僅保留作為檢查用途。</small></div>`;
+  }
+  if (result.candidates.length) {
+    const html = result.candidates.map(x => `<div class="n-candidate">相似度 <b>${Math.round(x.score*100)}%</b><br>${escapeHtml(x.consignee.taiwan_notify_name)}</div>`).join('');
+    return `<div class="n-match similar">🟡 找不到完全相同名稱，提供相似候選${html}<small>候選僅供人工確認，本階段不會自動採用。</small></div>`;
+  }
+  return '<div class="n-match none">❌ 找不到相符或足夠相似的台灣通知人</div>';
+}
+
+function renderT6ConsigneeDbTest() {
+  const section = document.getElementById('t6-consignee-test');
+  const body = document.getElementById('t6-consignee-test-body');
+  const note = document.getElementById('t6-consignee-test-note');
+  if (!section || !body || !note || !Array.isArray(uploadedRows) || !uploadedRows.length) {
+    if (section) section.classList.remove('show');
+    return;
+  }
+
+  const sample = uploadedRows[0];
+  const keys = Object.keys(sample);
+  const findKey = patterns => keys.find(k => patterns.some(p => k.includes(p)));
+  const kConsignee = findKey(['收货人','收貨人']);
+  const kLocation = findKey(['卸存地']);
+  if (!kConsignee || !kLocation) {
+    section.classList.remove('show');
+    return;
+  }
+
+  const t6Rows = uploadedRows.map((row, index) => ({ row, excelRow: row.__excelRow || index + 2 }))
+    .filter(x => ['003C2002','003C2031'].includes(normalizeLocationCode(x.row[kLocation])));
+
+  if (!t6Rows.length) {
+    section.classList.remove('show');
+    return;
+  }
+
+  note.textContent = '這一區才是 T6 實際艙單會採用的 DB 匹配結果：一律先用「收貨人＋卸存地」找 DB；T6 最終台灣通知人直接取命中 DB 的 taiwan_notify_name。N 欄不會覆蓋這個結果。';
+
+  body.innerHTML = t6Rows.map(({row, excelRow}) => {
+    const raw = String(row[kConsignee] || '').trim();
+    const parsed = extractConsigneeCompanyName(raw) || raw;
+    const loc = normalizeLocationCode(row[kLocation]);
+    let candidates = consignees.filter(c =>
+      normalizeConsigneeName(c.name) === normalizeConsigneeName(parsed) &&
+      normalizeLocationCode(c.location) === loc
+    );
+    const taxId = extractConsigneeTaxId(raw);
+    if (taxId && candidates.length) {
+      const taxMatches = candidates.filter(c => String(c.tax_id || '').replace(/\D/g,'') === taxId);
+      if (taxMatches.length === 1) candidates = taxMatches;
+    }
+
+    if (candidates.length === 1) {
+      const c = candidates[0];
+      return `<tr>
+        <td>${excelRow}</td>
+        <td class="n-raw">${escapeHtml(raw)}</td>
+        <td class="n-extracted">${escapeHtml(parsed)}</td>
+        <td><b>${escapeHtml(loc)}</b></td>
+        <td class="n-match exact">✅ 找到 1 筆<br>${escapeHtml(c.name)}<small>統編：${escapeHtml(c.tax_id || '—')}<br>DB 卸存地：${escapeHtml(c.location || '—')}</small></td>
+        <td class="n-match exact"><b>${escapeHtml(c.taiwan_notify_name || '（未設定）')}</b><small>T6 直接採用 DB 台灣通知人；N 欄不覆蓋。</small></td>
+      </tr>`;
+    }
+
+    const detail = candidates.length
+      ? `找到 ${candidates.length} 筆同收貨人＋卸存地資料，無法唯一判定`
+      : '❌ 找不到「收貨人＋卸存地」對應的 DB 資料';
+    return `<tr>
+      <td>${excelRow}</td>
+      <td class="n-raw">${escapeHtml(raw)}</td>
+      <td class="n-extracted">${escapeHtml(parsed)}</td>
+      <td><b>${escapeHtml(loc)}</b></td>
+      <td class="n-match none">${escapeHtml(detail)}</td>
+      <td class="n-match none">—</td>
+    </tr>`;
+  }).join('');
+
+  section.classList.add('show');
+}
+
+function renderNColumnTest() {
+  const section = document.getElementById('n-column-test');
+  const body = document.getElementById('n-column-test-body');
+  const note = document.getElementById('n-column-test-note');
+
+  if (!nColumnTestRows.length) {
+    section.classList.remove('show');
+    return;
+  }
+
+  note.textContent = `成功讀取 N 欄：${nColumnTestRows.length} 筆；Supabase 收貨人資料：${Array.isArray(consignees) ? consignees.length : 0} 筆。公司名稱會先從 N 欄切出完整法律後綴（如 LTD、INC、CORP），再做「完全比對＋相似候選」測試；黃色候選不會自動採用。`;
+  body.innerHTML = nColumnTestRows.map(item => `
+    <tr>
+      <td>${item.excelRow}</td>
+      <td class="n-raw">${escapeHtml(item.rawN)}</td>
+      <td class="n-extracted">${escapeHtml(item.extractedName) || '（未擷取到公司名稱）'}</td>
+      <td>${renderNotifyMatch(item)}</td>
+    </tr>
+  `).join('');
+  section.classList.add('show');
+}
+
+function showError(msgs) {
+  const box = document.getElementById('error-box');
+  box.innerHTML = '⚠️ 無法產生艙單：<ul>' + msgs.map(m => `<li>${m}</li>`).join('') + '</ul>';
+  box.classList.add('show');
+}
+function clearError() { document.getElementById('error-box').classList.remove('show'); }
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s || '';
+  return div.innerHTML;
+}
+
+function toRocDate(isoDate) {
+  if (!isoDate) return '';
+  const [y, m, d] = isoDate.split('-').map(Number);
+  return `${y - 1911}/${m}/${d}`;
+}
+
+// 網站日期直接使用民國年顯示，例如 115/08/25。
+// 產生 Excel 前再轉回 ISO，讓既有的資料處理流程維持不變。
+function rocToIsoDate(value) {
+  const raw = String(value || '').trim().replace(/\./g, '/').replace(/\s+/g, '');
+  if (!raw) return '';
+
+  const parts = raw.split('/').filter(Boolean);
+  let year, month, day;
+
+  if (parts.length === 2) {
+    // M/D 或 MM/DD：年份自動使用目前西元年。
+    year = new Date().getFullYear();
+    month = Number(parts[0]);
+    day = Number(parts[1]);
+  } else if (parts.length === 3) {
+    // 民國年/月/日，例如 115/8/25 或 115/08/25。
+    const y = Number(parts[0]);
+    if (!/^\d{3,4}$/.test(parts[0])) return '';
+    year = y + 1911;
+    month = Number(parts[1]);
+    day = Number(parts[2]);
+  } else {
+    return '';
+  }
+
+  if (!Number.isInteger(month) || !Number.isInteger(day) || month < 1 || month > 12 || day < 1 || day > 31) return '';
+
+  // 嚴格驗證日期，避免 8/32、2/31 這類輸入被 JS 自動推進到下一個月。
+  const dt = new Date(year, month - 1, day);
+  if (dt.getFullYear() !== year || dt.getMonth() !== month - 1 || dt.getDate() !== day) return '';
+
+  return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+}
+
+function formatRocDateInput(el) {
+  // 輸入過程只限制字元，不自動插入斜線，避免輸入 8/25 時被重新切割成 82/5。
+  const before = el.value;
+  const cleaned = before.replace(/[^0-9/.]/g, '');
+  if (before !== cleaned) {
+    const pos = el.selectionStart || cleaned.length;
+    el.value = cleaned;
+    try { el.setSelectionRange(Math.min(pos, cleaned.length), Math.min(pos, cleaned.length)); } catch (_) {}
+  }
+  el.setCustomValidity('');
+}
+
+function normalizeRocDateInput(el) {
+  const raw = el.value.trim();
+  if (!raw) {
+    el.setCustomValidity('');
+    return;
+  }
+
+  const iso = rocToIsoDate(raw);
+  if (!iso) {
+    el.setCustomValidity('日期格式不正確，請重新輸入，例如 8/25、08/25、8.25、08.25 或 115/08/25');
+    el.reportValidity();
+    return;
+  }
+
+  // 正確日期一律統一成民國年兩位月日：115/08/25。
+  el.value = toRocDate(iso);
+  el.setCustomValidity('');
+}
+
+/* ══ 核心：產生艙單資料（依卸存地分組） ══ */
+function generatePreview() {
+  clearError();
+  window._manifestMatchTrace = [];
+
+  const shipId = document.getElementById('f-ship-select').value;
+  const voyage = document.getElementById('f-voyage').value.trim();
+  const registration = document.getElementById('f-registration').value.trim().toUpperCase();
+  const arrivalInput = document.getElementById('f-arrival-date').value;
+  const mooringInput = document.getElementById('f-mooring-date').value;
+  const arrivalDate = rocToIsoDate(arrivalInput);
+  const mooringDate = rocToIsoDate(mooringInput);
+  const locationList = getLocationInputs();
+
+  const missing = [];
+  if (!shipId) missing.push('請選擇一程船');
+  if (!voyage) missing.push('請輸入航次');
+  if (!registration) missing.push('請輸入船隻掛號');
+  if (!arrivalDate) missing.push('請輸入時間');
+  if (!mooringDate) missing.push('請輸入申請日期');
+  if (!locationList.length) missing.push('請至少輸入一個卸存地');
+  locationList.forEach(l => {
+    if (!l.ship2Name) missing.push(`卸存地「${l.location}」尚未輸入二程船`);
+  });
+  if (!uploadedRows) missing.push('請上傳原始 Excel 檔案');
+  if (missing.length) { showError(missing); return; }
+
+  const sample = uploadedRows[0];
+  const keys = Object.keys(sample);
+  const findKey = (patterns) => keys.find(k => patterns.some(p => k.includes(p)));
+
+  const kBillNo     = findKey(['提单号', '提單號']);
+  const kConsignee  = findKey(['收货人', '收貨人']);
+  const kIntlCode   = findKey(['国际码', '國際碼']);
+  const kSeal       = findKey(['铅封号', '鉛封號']);
+  const kPiecesTW   = findKey(['台湾件数', '台灣件數']);
+  const kWeightTW   = findKey(['台湾重量', '台灣重量']);
+  const kPieces     = findKey(['件数', '件數']);
+  const kWeightRaw  = findKey(['毛重']);
+  const kType       = findKey(['柜型', '櫃型']);
+  const kLocation   = findKey(['卸存地']);
+
+  const fieldErrors = [];
+  if (!kBillNo)    fieldErrors.push('找不到「提单号」欄位');
+  if (!kConsignee) fieldErrors.push('找不到「收货人」欄位');
+  if (!kIntlCode)  fieldErrors.push('找不到「国际码」欄位');
+  if (!kSeal)      fieldErrors.push('找不到「铅封号」欄位');
+  if (!kType)      fieldErrors.push('找不到「柜型」欄位');
+  if (!kLocation)  fieldErrors.push('找不到「卸存地」欄位（無法依卸存地過濾資料）');
+  if (fieldErrors.length) { showError(fieldErrors); return; }
+
+  // 依提單號排序（先排序，確保艙號分配順序正確）
+  const sorted = [...uploadedRows].sort((a, b) => {
+    const av = String(a[kBillNo] || ''), bv = String(b[kBillNo] || '');
+    return av.localeCompare(bv, undefined, { numeric: true });
+  });
+
+  const notFound = new Set();
+  manifestByLocation = {};
+
+  const locationCodes = locationList.map(l => normalizeLocationCode(l.location));
+  locationList.forEach(l => {
+    manifestByLocation[l.location] = { items: [], ship2Name: l.ship2Name };
+  });
+
+  const sealCounter = {}; // key: `${consigneeName}|${location}`
+
+  function nextSealNo(value){
+    const s=String(value??'').trim().toUpperCase();
+    const m=s.match(/^([A-Z]*)([0-9]+)$/);
+    if(!m) return s;
+    const prefix=m[1], digits=m[2];
+    return prefix + String(Number(digits)+1).padStart(digits.length,'0');
+  }
+
+  for (const row of sorted) {
+    const rowLocation = normalizeLocationCode(row[kLocation]);
+    if (!locationCodes.includes(rowLocation)) continue; // 不在本次要處理的卸存地清單裡，略過
+
+    const rawConsigneeName = String(row[kConsignee] || '').trim();
+    // 【固定規則】所有資料（T6 / 非 T6）一律先用「收貨人＋卸存地」找 DB。
+    // 收貨人可能是「#統編\n公司名稱」，所以先解析真正公司名稱。
+    const consigneeName = extractConsigneeCompanyName(rawConsigneeName) || rawConsigneeName;
+    const normalizedConsigneeName = normalizeConsigneeName(consigneeName);
+    let sameConsigneeLocation = consignees.filter(c =>
+      normalizeConsigneeName(c.name) === normalizedConsigneeName &&
+      normalizeLocationCode(c.location) === rowLocation
+    );
+
+    // 若原始「收貨人」同時帶有 8 碼統編，先用「收貨人＋卸存地」找到候選後，
+    // 再以統編驗證/消歧。這不改變主規則，只是避免 Excel 的「#統編 / 公司名」格式
+    // 在解析異常時，把 JET-F 誤判成同卸存地的其他公司（例如 PGL）。
+    const consigneeTaxId = extractConsigneeTaxId(rawConsigneeName);
+    if (consigneeTaxId && sameConsigneeLocation.length) {
+      const taxMatches = sameConsigneeLocation.filter(c =>
+        String(c.tax_id || '').replace(/\D/g, '') === consigneeTaxId
+      );
+      if (taxMatches.length === 1) {
+        sameConsigneeLocation = taxMatches;
+      }
+    }
+
+    let match = null;
+    const isT6 = ['003C2002', '003C2031'].includes(rowLocation);
+
+    if (!sameConsigneeLocation.length) {
+      notFound.add(`${consigneeName}（卸存地：${rowLocation}）`);
+      continue;
+    }
+
+    if (isT6) {
+      // T6（目前只有 003C2002、003C2031）：
+      // 「收貨人＋卸存地」命中後，直接採用 DB 的 taiwan_notify_name。
+      // Excel N 欄只作檢查，不得覆蓋，也不得阻擋 T6。
+      if (sameConsigneeLocation.length === 1) {
+        match = sameConsigneeLocation[0];
+      } else {
+        notFound.add(`${consigneeName}（卸存地：${rowLocation}）存在 ${sameConsigneeLocation.length} 筆 DB 資料，T6 無法判定唯一收貨人資料`);
+        continue;
+      }
+    } else if (sameConsigneeLocation.length === 1) {
+      // 非 T6 若「收貨人＋卸存地」只有一筆，直接使用這筆；N 欄不必介入。
+      match = sameConsigneeLocation[0];
+    } else {
+      // 非 T6 若同一「收貨人＋卸存地」有多筆，才用 JIN XIN 的 N 欄台灣通知人
+      // 從候選 DB 資料中選出正確的 taiwan_notify_name。
+      const rawNotify = String(row.__rawTaiwanNotify || '').trim();
+      const notifyName = extractNotifyCompanyName(rawNotify) || rawNotify;
+      const normalizedNotifyName = normalizeNotifyName(notifyName);
+      const notifyMatches = sameConsigneeLocation.filter(c =>
+        normalizeNotifyName(c.taiwan_notify_name) === normalizedNotifyName
+      );
+
+      if (notifyMatches.length === 1) {
+        match = notifyMatches[0];
+      } else if (notifyMatches.length > 1) {
+        notFound.add(`${consigneeName}（卸存地：${rowLocation}）的 N 欄台灣通知人對應到多筆 DB 資料，無法唯一判定`);
+        continue;
+      } else {
+        const candidateNames = sameConsigneeLocation
+          .map(c => c.taiwan_notify_name || '（未設定）')
+          .join(' / ');
+        notFound.add(`${consigneeName}（卸存地：${rowLocation}）有多筆 DB 資料，但 N 欄「${notifyName || '（空白）'}」沒有對應；候選台灣通知人：${candidateNames}`);
+        continue;
+      }
+    }
+
+    // 保留最後實際採用的 DB 資料，方便檢查「Excel N 欄」是否只是診斷資訊，
+    // 以及確認 T6 是否真的使用 match.taiwan_notify_name。
+    if (typeof window !== 'undefined') {
+      window._manifestMatchTrace = window._manifestMatchTrace || [];
+      window._manifestMatchTrace.push({
+        excelRow: row.__excelRow || '',
+        rawConsignee: rawConsigneeName,
+        parsedConsignee: consigneeName,
+        location: rowLocation,
+        isT6,
+        rawN: row.__rawTaiwanNotify || '',
+        matchedDbConsignee: match.name || '',
+        matchedDbLocation: match.location || '',
+        matchedDbTaxId: match.tax_id || '',
+        dbTaiwanNotifyName: match.taiwan_notify_name || '',
+      });
+    }
+
+    const counterKey = `${consigneeName}|${rowLocation}`;
+    if (!(counterKey in sealCounter)) {
+      sealCounter[counterKey] = match.seal_start;
+    } else {
+      sealCounter[counterKey] = nextSealNo(sealCounter[counterKey]);
+    }
+    const sealNo = sealCounter[counterKey];
+
+    const billNo = String(row[kBillNo] || '').trim();
+    const intlCode = String(row[kIntlCode] || '').trim();
+    const sealNumRaw = row[kSeal];
+    // 件數/毛重：優先用台灣件数/台灣重量，沒有值才用件数/毛重
+    const pieces = (row[kPiecesTW] !== '' && row[kPiecesTW] != null) ? row[kPiecesTW] : (kPieces ? row[kPieces] : '');
+    const weight = (row[kWeightTW] !== '' && row[kWeightTW] != null) ? row[kWeightTW] : (kWeightRaw ? row[kWeightRaw] : '');
+    const containerType = String(row[kType] || '').trim();
+    const mappedType = mapContainerTypeForManifest(containerType);
+
+    const cargoDesc = `EXPRESS PACKAGE  ${intlCode}/${mappedType}/2/${sealNumRaw}`;
+    // 艙單收貨人顯示以實際命中的 Supabase DB 名稱為準；
+    // 文件上的 LIMITED / DB 的 LINITED 等差異只影響比對，不覆蓋 DB 正式名稱。
+    const dbConsigneeName = match.name || consigneeName;
+    const consigneeInfo = `收貨人:${dbConsigneeName}\n${match.address || ''}`;
+    const unit = match.unit || 'PKG';
+
+    manifestByLocation[rowLocation].items.push({
+      billNo, sealNo, pieces, unit,
+      trackNo: intlCode, cargoDesc, weight,
+      consigneeName,
+      // 艙單顯示用的正式收貨人名稱；比對時仍保留 Excel 原始收貨人名稱。
+      matchedDbConsigneeName: match.name || '',
+      consigneeShort: match.short_name || '', consigneeInfo,
+      chineseName: match.chinese_name || '', contactInfo: match.contact_info || '',
+      taxId: match.tax_id || '',
+      shortName: match.short_name || '',
+      mappedType, sealNumRaw,
+      // T6 目前只處理 003C2002、003C2031；T6 的台灣通知人以 DB 為準。
+      isT6,
+      taiwanNotifyName: match.taiwan_notify_name || '',
+    });
+  }
+
+  if (notFound.size) {
+    showError([
+      '以下收貨人找不到對照資料，請先到「收貨人管理」新增：',
+      ...Array.from(notFound).map(n => `<b>${n}</b>`)
+    ]);
+    return;
+  }
+
+  // 移除沒有任何資料的卸存地分頁
+  Object.keys(manifestByLocation).forEach(loc => {
+    if (!manifestByLocation[loc].items.length) delete manifestByLocation[loc];
+  });
+
+  if (!Object.keys(manifestByLocation).length) {
+    showError(['沒有任何資料符合指定的卸存地，請確認輸入的卸存地是否正確']);
+    return;
+  }
+
+  // 每個卸存地內部依艙號排序
+  Object.values(manifestByLocation).forEach(loc => {
+    loc.items.sort((a, b) => a.sealNo - b.sealNo);
+  });
+
+  // 儲存共用資訊
+  const ship = ships.find(s => s.id === shipId);
+  window._manifestMeta = { ship, voyage, registration, arrivalDate, mooringDate, arrivalRoc: toRocDate(arrivalDate), mooringRoc: toRocDate(mooringDate) };
+
+  currentLocationTab = Object.keys(manifestByLocation)[0];
+  renderLocationTabs();
+  renderPreview();
+}
+
+function renderLocationTabs() {
+  const tabsEl = document.getElementById('loc-tabs');
+  tabsEl.innerHTML = Object.keys(manifestByLocation).map(loc => `
+    <button class="loc-tab ${loc === currentLocationTab ? 'active' : ''}" onclick="switchLocationTab('${loc}')">
+      ${loc}（${manifestByLocation[loc].items.length}）
+    </button>`).join('');
+}
+
+function switchLocationTab(loc) {
+  currentLocationTab = loc;
+  renderLocationTabs();
+  renderPreview();
+}
+
+async function switchView(view) {
+  currentView = view;
+  document.getElementById('view-btn-table').classList.toggle('active', view === 'table');
+  document.getElementById('view-btn-excel').classList.toggle('active', view === 'excel');
+  document.getElementById('view-table').style.display = view === 'table' ? 'block' : 'none';
+  document.getElementById('view-excel').style.display = view === 'excel' ? 'block' : 'none';
+  await renderPreview();
+}
+
+async function renderPreview() {
+  const items = manifestByLocation[currentLocationTab].items;
+  document.getElementById('stat-total').textContent = items.length;
+  const seals = items.map(x => x.sealNo);
+  document.getElementById('stat-range').textContent = `${Math.min(...seals)} ~ ${Math.max(...seals)}`;
+
+  if (currentView === 'table') {
+    document.getElementById('preview-tbody').innerHTML = items.map(it => `
+      <tr>
+        <td class="cell-mono">${escapeHtml(it.billNo)}</td>
+        <td class="cell-mono">${it.sealNo}</td>
+        <td>${escapeHtml(String(it.pieces))}</td>
+        <td>${escapeHtml(it.unit)}</td>
+        <td class="cell-mono">${escapeHtml(it.trackNo)}</td>
+        <td class="cell-wide cell-mono">${escapeHtml(it.cargoDesc)}</td>
+        <td>${escapeHtml(String(it.weight))}</td>
+        <td class="cell-wide">${escapeHtml(it.consigneeShort)}</td>
+        <td class="cell-wide">${escapeHtml(it.consigneeInfo).replace(/\n/g,'<br>')}</td>
+      </tr>`).join('');
+  } else {
+    await renderExcelStyleView();
+  }
+
+  document.getElementById('preview-section').classList.add('show');
+}
+
+function excelCellDisplayValue(cell) {
+  let value = cell ? cell.value : null;
+
+  // ExcelJS 的公式儲存格通常是 { formula, result }。
+  // 預覽要顯示「公式算出的結果」，而不是 [object Object]。
+  if (value && typeof value === 'object') {
+    if (Object.prototype.hasOwnProperty.call(value, 'result')) {
+      value = value.result;
+    } else if (value.richText) {
+      value = value.richText.map(t => t.text || '').join('');
+    } else if (value.text != null) {
+      value = value.text;
+    } else if (value.formula != null) {
+      value = '';
+    }
+  }
+
+  if (value instanceof Date) {
+    // ExcelJS 依照儲存格的日期格式把公式快取值轉成 Date。
+    // 範本中的日期是民國年文字（例如 115/08/25），這種值不是 JS 原生日期，
+    // 若被當成 Date 解析就可能在預覽出現 Invalid Date。
+    if (!Number.isNaN(value.getTime())) {
+      return value.toLocaleDateString('zh-TW');
+    }
+    // Date 無效時，優先回頭取公式/儲存格模型中的原始快取值。
+    const rawModel = cell && cell.model ? cell.model.v : null;
+    if (rawModel !== null && rawModel !== undefined && rawModel !== '') {
+      return String(rawModel);
+    }
+    return '';
+  }
+  if (value == null) return '';
+  let text = String(value);
+
+  // 預覽時不要把 Template 裡的英文欄位說明帶出來；實際 Excel 匯出不受影響。
+  // 這些說明是「預定到港時間---Time of Arrival」與「繫泊時間---time a Mooring Yeat」。
+  const labelOnly = [
+    '預定到港時間---Time of Arrival',
+    '繫泊時間---time a Mooring Yeat'
+  ];
+  if (labelOnly.some(label => text.trim().toLowerCase() === label.toLowerCase())) return '';
+
+  // 若日期儲存格的預覽值意外把說明文字與日期一起帶出，只保留日期部分。
+  text = text
+    .replace(/預定到港時間\s*[-—–]+\s*Time of Arrival\s*/i, '')
+    .replace(/繫泊時間\s*[-—–]+\s*time\s*a\s*Mooring\s*Yeat\s*/i, '')
+    .trim();
+
+  return text;
+}
+
+function excelArgbToCss(argb) {
+  if (!argb) return '';
+  const hex = String(argb).replace(/^FF/i, '');
+  if (!/^[0-9A-Fa-f]{6}$/.test(hex)) return '';
+  return '#' + hex;
+}
+
+function excelSideCss(side) {
+  if (!side || !side.style) return '';
+  const map = { thin:'1px', medium:'2px', thick:'3px', double:'3px', hair:'1px', dotted:'1px', dashed:'1px' };
+  const width = map[side.style] || '1px';
+  const color = excelArgbToCss(side.color && (side.color.argb || side.color.rgb)) || '#888';
+  const style = side.style === 'double' ? 'double' : (side.style === 'dotted' ? 'dotted' : (side.style === 'dashed' ? 'dashed' : 'solid'));
+  return `${width} ${style} ${color}`;
+}
+
+function excelCellInlineStyle(cell, row) {
+  const st = cell.style || {};
+  const font = st.font || {};
+  const fill = st.fill || {};
+  const alignment = st.alignment || {};
+  const border = st.border || {};
+  const css = [];
+
+  if (font.name) css.push(`font-family:${font.name},Arial,sans-serif`);
+  if (font.sz) css.push(`font-size:${Math.max(8, Number(font.sz))}pt`);
+  if (font.bold) css.push('font-weight:700');
+  if (font.italic) css.push('font-style:italic');
+  if (font.color) {
+    const color = excelArgbToCss(font.color.argb || font.color.rgb);
+    if (color) css.push(`color:${color}`);
+  }
+  if (fill.type === 'pattern' && fill.pattern === 'solid' && fill.fgColor) {
+    const bg = excelArgbToCss(fill.fgColor.argb || fill.fgColor.rgb);
+    if (bg) css.push(`background:${bg}`);
+  }
+
+  const h = alignment.horizontal;
+  if (h === 'center') css.push('text-align:center');
+  else if (h === 'right') css.push('text-align:right');
+  else if (h === 'left') css.push('text-align:left');
+  else css.push('text-align:center');
+
+  if (alignment.vertical === 'top') css.push('vertical-align:top');
+  else if (alignment.vertical === 'bottom') css.push('vertical-align:bottom');
+  else css.push('vertical-align:middle');
+
+  if (alignment.wrapText) css.push('white-space:pre-wrap');
+  else css.push('white-space:pre');
+
+  if (alignment.textRotation) css.push(`transform:rotate(${Number(alignment.textRotation)}deg)`);
+
+  const borders = [
+    ['top','border-top'], ['right','border-right'], ['bottom','border-bottom'], ['left','border-left']
+  ];
+  for (const [side, prop] of borders) {
+    const b = excelSideCss(border[side]);
+    if (b) css.push(`${prop}:${b}`);
+  }
+
+  return css.join(';');
+}
+
+async function renderExcelStyleView() {
+  try {
+    // 預覽直接讀取「真正準備匯出的 XLSX」，所以資料、公式結果、合併儲存格都跟匯出檔走同一套來源。
+    const buf = await buildManifestXlsx(currentLocationTab);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buf);
+    const ws = workbook.getWorksheet('進口艙單印1份');
+    if (!ws) throw new Error('找不到「進口艙單印1份」工作表');
+
+    const items = manifestByLocation[currentLocationTab].items;
+    const container = document.getElementById('excel-preview-table');
+
+    // 艙單預覽只顯示 Excel 的列印範圍。
+    // Template 1 筆時列印範圍是 A1:N19；每增加 1 筆資料，列印範圍跟著固定區往下延伸。
+    const startRow = 1;
+    const endRow = Math.min(19 + Math.max(0, items.length - 1), ws.rowCount);
+    const startCol = 1;
+    const endCol = 14; // N 欄
+
+    const skipSet = new Set();
+    const spanMap = {};
+    for (let r = startRow; r <= endRow; r++) {
+      const row = ws.getRow(r);
+      for (let c = startCol; c <= endCol; c++) {
+        const cell = row.getCell(c);
+        if (cell.isMerged && cell.master && cell.master.address !== cell.address) {
+          skipSet.add(`${r}-${c}`);
+        }
+      }
+    }
+    for (let r = startRow; r <= endRow; r++) {
+      const row = ws.getRow(r);
+      for (let c = startCol; c <= endCol; c++) {
+        const key = `${r}-${c}`;
+        if (skipSet.has(key)) continue;
+        const cell = row.getCell(c);
+        if (!cell.isMerged) continue;
+        let colspan = 1, rowspan = 1;
+        while (c + colspan <= endCol) {
+          const x = ws.getRow(r).getCell(c + colspan);
+          if (!(x.isMerged && x.master && x.master.address === cell.address)) break;
+          colspan++;
+        }
+        while (r + rowspan <= endRow) {
+          const x = ws.getRow(r + rowspan).getCell(c);
+          if (!(x.isMerged && x.master && x.master.address === cell.address)) break;
+          rowspan++;
+        }
+        if (rowspan > 1 || colspan > 1) spanMap[key] = { rowspan, colspan };
+      }
+    }
+
+    // 依照 Excel 的欄寬建立 colgroup，讓預覽比例更接近真正的 Excel。
+    let colgroup = '<colgroup>';
+    for (let c = startCol; c <= endCol; c++) {
+      const width = ws.getColumn(c).width || 10;
+      colgroup += `<col style="width:${Math.max(24, Math.round(width * 7))}px">`;
+    }
+    colgroup += '</colgroup>';
+
+    let html = `<div class="excel-preview-page"><table class="excel-preview-real">${colgroup}<tbody>`;
+    for (let r = startRow; r <= endRow; r++) {
+      const row = ws.getRow(r);
+      const rowHeight = row.height ? Math.max(16, row.height * 1.333) : 22;
+      html += `<tr style="height:${rowHeight}px">`;
+      for (let c = startCol; c <= endCol; c++) {
+        const key = `${r}-${c}`;
+        if (skipSet.has(key)) continue;
+        const cell = row.getCell(c);
+        let value = excelCellDisplayValue(cell);
+        // J6 / L6 在 Excel 中是公式格；預覽不需要重新解析公式，
+        // 直接使用目前選船的「時間」即可。這只影響預覽，不會改變匯出檔。
+        if (r === 6 && (c === 10 || c === 12)) {
+          const previewMeta = window._manifestMeta || {};
+          if (previewMeta.arrivalRoc) value = previewMeta.arrivalRoc;
+        }
+        const span = spanMap[key];
+        const rowspanAttr = span && span.rowspan > 1 ? ` rowspan="${span.rowspan}"` : '';
+        const colspanAttr = span && span.colspan > 1 ? ` colspan="${span.colspan}"` : '';
+        const style = excelCellInlineStyle(cell, row);
+        html += `<td${rowspanAttr}${colspanAttr} style="${style}">${escapeHtml(value)}</td>`;
+      }
+      html += '</tr>';
+    }
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+  } catch (err) {
+    document.getElementById('excel-preview-table').innerHTML =
+      `<tbody><tr><td style="color:#cc2222;padding:20px">預覽產生失敗：${escapeHtml(err.message)}</td></tr></tbody>`;
+  }
+}
+
+/*
+  核心匯出：直接修改原始 XLSX 的 worksheet XML，再重新打包。
+  不讓 ExcelJS 重新序列化整本活頁簿，因此其它工作表的 XML、格式、列印設定等
+  都保持原樣，也避免 Excel 開啟時出現「已修復儲存格資訊」的警告。
+*/
+async function buildManifestXlsx(loc) {
+  if (typeof JSZip === 'undefined') throw new Error('Excel 元件載入失敗，請重新整理頁面');
+  const meta = window._manifestMeta;
+  const items = manifestByLocation[loc].items;
+
+  const response = await fetch(TEMPLATE_PATH, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`找不到 Excel 範本：${TEMPLATE_PATH}（HTTP ${response.status}）`);
+  const templateBuf = await response.arrayBuffer();
+  const zip = await JSZip.loadAsync(templateBuf);
+
+  // 範本內原有 calcChain 是舊的計算快取；修改公式引用的來源資料後，
+  // 保留它反而會讓 Excel 啟動時要求修復，因此移除並讓 Excel 重新計算。
+  if (zip.file('xl/calcChain.xml')) zip.remove('xl/calcChain.xml');
+
+  const NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  const REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const parser = new DOMParser();
+  const serializer = new XMLSerializer();
+
+  const workbookXml = parser.parseFromString(await zip.file('xl/workbook.xml').async('text'), 'application/xml');
+  const relsXml = parser.parseFromString(await zip.file('xl/_rels/workbook.xml.rels').async('text'), 'application/xml');
+
+  // 移除 calcChain 關聯。
+  for (const relNode of Array.from(relsXml.getElementsByTagName('Relationship'))) {
+    if ((relNode.getAttribute('Type') || '').includes('/calcChain')) relNode.parentNode.removeChild(relNode);
+  }
+
+  // workbook 設為開啟時自動重新計算。
+  const calcPr = workbookXml.getElementsByTagNameNS(NS, 'calcPr')[0];
+  if (calcPr) {
+    calcPr.setAttribute('calcMode', 'auto');
+    calcPr.setAttribute('fullCalcOnLoad', '1');
+    calcPr.setAttribute('forceFullCalc', '1');
+  }
+
+  function getSheetTarget(sheetName) {
+    const sheetEl = Array.from(workbookXml.getElementsByTagNameNS(NS, 'sheet'))
+      .find(s => s.getAttribute('name') === sheetName);
+    if (!sheetEl) throw new Error(`範本檔案裡找不到「${sheetName}」工作表`);
+    const rid = sheetEl.getAttributeNS(REL_NS, 'id');
+    const rel = Array.from(relsXml.getElementsByTagName('Relationship'))
+      .find(x => x.getAttribute('Id') === rid);
+    if (!rel) throw new Error(`找不到「${sheetName}」工作表的 XML 位置`);
+    let target = rel.getAttribute('Target').replace(/^\//, '');
+    if (!target.startsWith('xl/')) target = 'xl/' + target.replace(/^\.\//, '');
+    return target;
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 第五階段：運送單動態工作表
+  // Template 現在只提供「運送第1筆」一張完整母版。
+  // 超過1筆時，複製「運送第1筆」的完整 XML 與工作表關聯，
+  // 再依 Template 原有公式模式只調整艙單／貨櫃清單的來源列。
+  // 每張運送單列印範圍固定 A1:N41。
+  // ═══════════════════════════════════════════════════════════════════
+  function getWorksheetSheetInfo(sheetName) {
+    const sheetEl = Array.from(workbookXml.getElementsByTagNameNS(NS, 'sheet'))
+      .find(s => s.getAttribute('name') === sheetName);
+    if (!sheetEl) throw new Error(`範本檔案裡找不到「${sheetName}」工作表`);
+    const rid = sheetEl.getAttributeNS(REL_NS, 'id');
+    const rel = Array.from(relsXml.getElementsByTagName('Relationship'))
+      .find(x => x.getAttribute('Id') === rid);
+    if (!rel) throw new Error(`找不到「${sheetName}」工作表的 XML 位置`);
+    let target = rel.getAttribute('Target').replace(/^\//, '');
+    if (!target.startsWith('xl/')) target = 'xl/' + target.replace(/^\.\//, '');
+    return { sheetEl, rid, rel, target };
+  }
+  function splitRef(ref) {
+    const m = String(ref).match(/^([A-Z]+)(\d+)$/);
+    if (!m) throw new Error(`無效儲存格位置：${ref}`);
+    return { col:m[1], row:Number(m[2]) };
+  }
+  function colNum(letters) {
+    let n=0; for (const ch of letters) n=n*26+(ch.charCodeAt(0)-64); return n;
+  }
+  function setRefRow(ref, row) {
+    const p=splitRef(ref); return `${p.col}${row}`;
+  }
+
+  function sheetApi(sheetXml) {
+    const root = sheetXml.documentElement;
+    const sheetData = root.getElementsByTagNameNS(NS, 'sheetData')[0];
+    if (!sheetData) throw new Error('工作表缺少 sheetData');
+
+    const rows = () => Array.from(sheetData.getElementsByTagNameNS(NS, 'row')).filter(r => r.parentNode === sheetData);
+    const getRow = n => rows().find(r => Number(r.getAttribute('r')) === n);
+
+    function findCell(row, ref) {
+      return Array.from(row.getElementsByTagNameNS(NS, 'c'))
+        .find(c => c.getAttribute('r') === ref && c.parentNode === row);
+    }
+    function ensureCell(row, ref) {
+      let cell=findCell(row,ref);
+      if (cell) return cell;
+      cell=sheetXml.createElementNS(NS,'c'); cell.setAttribute('r',ref);
+      const targetCol=colNum(splitRef(ref).col);
+      const cells=Array.from(row.getElementsByTagNameNS(NS,'c')).filter(c=>c.parentNode===row);
+      const before=cells.find(c=>colNum(splitRef(c.getAttribute('r')).col)>targetCol);
+      if (before) row.insertBefore(cell,before); else row.appendChild(cell);
+      return cell;
+    }
+    function clearChildren(cell) {
+      while (cell.firstChild) cell.removeChild(cell.firstChild);
+      cell.removeAttribute('t');
+    }
+    function setValue(ref, value) {
+      const p=splitRef(ref), row=getRow(p.row);
+      if (!row) throw new Error(`找不到第 ${p.row} 列`);
+      const cell=ensureCell(row,ref);
+      // 保留 cell 的 style / s 屬性，只替換內容。
+      clearChildren(cell);
+      if (value === null || value === undefined || value === '') return;
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        const v=sheetXml.createElementNS(NS,'v'); v.textContent=String(value); cell.appendChild(v);
+      } else {
+        cell.setAttribute('t','inlineStr');
+        const is=sheetXml.createElementNS(NS,'is');
+        const t=sheetXml.createElementNS(NS,'t');
+        const text=String(value);
+        if (/^\s|\s$/.test(text)) t.setAttribute('xml:space','preserve');
+        t.textContent=text; is.appendChild(t); cell.appendChild(is);
+      }
+    }
+    function setFormula(ref, formula, cachedValue='') {
+      const p=splitRef(ref), row=getRow(p.row);
+      if (!row) throw new Error(`找不到第 ${p.row} 列`);
+      const cell=ensureCell(row,ref);
+      clearChildren(cell);
+      const f=sheetXml.createElementNS(NS,'f'); f.textContent=formula; cell.appendChild(f);
+      const v=sheetXml.createElementNS(NS,'v');
+      if (cachedValue !== null && cachedValue !== undefined) v.textContent=String(cachedValue);
+      cell.appendChild(v);
+      if (typeof cachedValue === 'string') cell.setAttribute('t','str');
+    }
+    function clearValue(ref) {
+      const p=splitRef(ref), row=getRow(p.row); if (!row) return;
+      const cell=findCell(row,ref); if (cell) clearChildren(cell);
+    }
+    return {root,sheetData,rows,getRow,findCell,ensureCell,setValue,setFormula,clearValue};
+  }
+
+  // ══ 其他工作表的動態筆數工具 ══
+  function cloneRow(sheetXml, sourceRowNum, newRowNum) {
+    const api = sheetApi(sheetXml);
+    const source = api.getRow(sourceRowNum);
+    if (!source) throw new Error(`找不到樣式來源第 ${sourceRowNum} 列`);
+    const clone = source.cloneNode(true);
+    clone.setAttribute('r', String(newRowNum));
+    for (const cell of Array.from(clone.getElementsByTagNameNS(NS,'c'))) {
+      const oldRef = cell.getAttribute('r');
+      if (!oldRef) continue;
+      const p = splitRef(oldRef);
+      cell.setAttribute('r', `${p.col}${newRowNum}`);
+    }
+    return clone;
+  }
+
+  function mergeRefsForRows(sheetXml, minRow, maxRow) {
+    const mergeCellsEl = sheetXml.documentElement.getElementsByTagNameNS(NS,'mergeCells')[0];
+    if (!mergeCellsEl) return [];
+    return Array.from(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell'))
+      .map(mc => mc.getAttribute('ref'))
+      .filter(ref => {
+        const nums = (String(ref).match(/\d+/g) || []).map(Number);
+        return nums.length && Math.min(...nums) >= minRow && Math.max(...nums) <= maxRow;
+      });
+  }
+
+  function shiftRowsAndMerges(sheetXml, startRow, delta) {
+    if (!delta) return;
+    const root = sheetXml.documentElement;
+    const sheetData = root.getElementsByTagNameNS(NS,'sheetData')[0];
+    const rows = Array.from(sheetData.getElementsByTagNameNS(NS,'row'))
+      .filter(r => r.parentNode === sheetData)
+      .sort((a,b) => Number(b.getAttribute('r')) - Number(a.getAttribute('r')));
+    for (const row of rows) {
+      const n = Number(row.getAttribute('r'));
+      if (n < startRow) continue;
+      row.setAttribute('r', String(n + delta));
+      for (const cell of Array.from(row.getElementsByTagNameNS(NS,'c'))) {
+        const ref = cell.getAttribute('r');
+        if (!ref) continue;
+        const p = splitRef(ref);
+        cell.setAttribute('r', `${p.col}${n + delta}`);
+      }
+    }
+    const mergeCellsEl = root.getElementsByTagNameNS(NS,'mergeCells')[0];
+    if (mergeCellsEl) {
+      for (const mc of Array.from(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell'))) {
+        const ref = mc.getAttribute('ref');
+        const nums = (String(ref).match(/\d+/g) || []).map(Number);
+        if (!nums.length || Math.min(...nums) < startRow) continue;
+        mc.setAttribute('ref', String(ref).replace(/(\d+)/g, m => String(Number(m) + delta)));
+      }
+      mergeCellsEl.setAttribute('count', String(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell').length));
+    }
+    const dimension = root.getElementsByTagNameNS(NS,'dimension')[0];
+    if (dimension) {
+      const ref = dimension.getAttribute('ref');
+      if (ref) dimension.setAttribute('ref', ref.replace(/(\d+)$/, m => String(Number(m) + delta)));
+    }
+  }
+
+  function addMergeRefs(sheetXml, refs, rowDelta) {
+    const mergeCellsEl = sheetXml.documentElement.getElementsByTagNameNS(NS,'mergeCells')[0];
+    if (!mergeCellsEl) return;
+    for (const ref of refs) {
+      const shifted = String(ref).replace(/(\d+)/g, m => String(Number(m) + rowDelta));
+      const exists = Array.from(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell'))
+        .some(mc => mc.getAttribute('ref') === shifted);
+      if (!exists) {
+        const mc = sheetXml.createElementNS(NS,'mergeCell');
+        mc.setAttribute('ref', shifted);
+        mergeCellsEl.appendChild(mc);
+      }
+    }
+    mergeCellsEl.setAttribute('count', String(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell').length));
+  }
+
+  // ── 1. 建船資料檔：只更新資料來源格，其他工作表的公式全部保留。 ──
+  const shipTarget=getSheetTarget('建船資料檔');
+  const shipXml=parser.parseFromString(await zip.file(shipTarget).async('text'),'application/xml');
+  const shipApi=sheetApi(shipXml);
+
+  // 以最新 Template 的 B6:B13 為唯一資料來源。
+  // B12 對應表單的「時間」；B13 對應表單的「申請日期」，方便建船資料檔本身也跟著本次作業更新。
+  shipApi.setValue('B6', meta.ship?.ship_name || '');
+  shipApi.setValue('B7', meta.voyage || '');
+  shipApi.setValue('B8', meta.ship?.call_sign || '');
+  shipApi.setValue('B9', meta.ship?.captain_name || '');
+  shipApi.setValue('B10', meta.registration || '');
+  shipApi.setValue('B11', meta.ship?.gross_net_tonnage || '');
+  shipApi.setValue('B12', toRocDate(meta.arrivalDate));
+  shipApi.setValue('B13', toRocDate(meta.mooringDate));
+
+  // ── 2. 進口艙單：只填真正的資料來源欄位。D3/F3/H3/J3/L3/F6/J6/L6 皆保留 Template 公式。 ──
+  const sheetTarget=getSheetTarget('進口艙單印1份');
+  const sheetXml=parser.parseFromString(await zip.file(sheetTarget).async('text'),'application/xml');
+  const api=sheetApi(sheetXml);
+  const {root,sheetData,rows,getRow}=api;
+
+  const templateStart=16, templateCount=1, lastTemplateRow=16, footerStart=17;
+  const extra=Math.max(0,items.length-templateCount);
+
+  if (extra>0) {
+    const footerFirst=getRow(footerStart);
+    if (!footerFirst) throw new Error('最新範本找不到第 19 列的合計區');
+
+    const mergeCellsEl=root.getElementsByTagNameNS(NS,'mergeCells')[0];
+    const originalMerges=mergeCellsEl
+      ? Array.from(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell')).map(x=>x.getAttribute('ref'))
+      : [];
+
+    // 只抓第16列的原始合併：新版 Template 的資料列是 F:G、K:M。
+    const dataMerges=originalMerges.filter(ref=>{
+      const nums=(ref.match(/\d+/g)||[]).map(Number);
+      return nums.length && Math.min(...nums)===lastTemplateRow && Math.max(...nums)===lastTemplateRow;
+    });
+
+    // Footer（合計、簽章、英文說明）往下移，原有 style / cell 結構不重建。
+    for (const row of rows()) {
+      const n=Number(row.getAttribute('r'));
+      if (n>=footerStart) {
+        row.setAttribute('r',String(n+extra));
+        for (const cell of Array.from(row.getElementsByTagNameNS(NS,'c'))) {
+          cell.setAttribute('r',setRefRow(cell.getAttribute('r'),n+extra));
+        }
+      }
+    }
+
+    if (mergeCellsEl) {
+      for (const mc of Array.from(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell'))) {
+        const ref=mc.getAttribute('ref');
+        const nums=(ref.match(/\d+/g)||[]).map(Number);
+        if (nums.length && Math.min(...nums)>=footerStart) {
+          mc.setAttribute('ref',ref.replace(/(\d+)/g,m=>String(Number(m)+extra)));
+        }
+      }
+    }
+
+    // 從最新 Template 第16列複製「列格式＋合併結構」。
+    // 公式不會被清掉：F 欄的公式會依新列號更新。
+    const sourceRow=getRow(lastTemplateRow);
+    for (let i=1;i<=extra;i++) {
+      const nr=lastTemplateRow+i;
+      const clone=sourceRow.cloneNode(true);
+      clone.setAttribute('r',String(nr));
+
+      for (const cell of Array.from(clone.getElementsByTagNameNS(NS,'c'))) {
+        const oldRef=cell.getAttribute('r');
+        cell.setAttribute('r',setRefRow(oldRef,nr));
+
+        const f=cell.getElementsByTagNameNS(NS,'f')[0];
+        if (f) {
+          f.textContent=f.textContent.replace(/([A-Z]{1,3})16\b/g,(_,col)=>`${col}${nr}`);
+          // 讓預覽可看到公式結果；Excel 開啟後仍會重新計算。
+          while (cell.getElementsByTagNameNS(NS,'v').length) {
+            cell.removeChild(cell.getElementsByTagNameNS(NS,'v')[0]);
+          }
+          const v=sheetXml.createElementNS(NS,'v'); v.textContent=''; cell.appendChild(v);
+        } else {
+          // 新資料列的非公式內容先清空，但保留樣式。
+          while (cell.firstChild) cell.removeChild(cell.firstChild);
+          cell.removeAttribute('t');
+        }
+      }
+
+      sheetData.insertBefore(clone,footerFirst);
+
+      if (mergeCellsEl) {
+        for (const ref of dataMerges) {
+          const shifted=ref.replace(/(\d+)/g,m=>String(Number(m)+i));
+          // 防止重複建立 merge。
+          const exists=Array.from(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell'))
+            .some(mc=>mc.getAttribute('ref')===shifted);
+          if (!exists) {
+            const mc=sheetXml.createElementNS(NS,'mergeCell');
+            mc.setAttribute('ref',shifted);
+            mergeCellsEl.appendChild(mc);
+          }
+        }
+      }
+    }
+    if (mergeCellsEl) mergeCellsEl.setAttribute('count',String(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell').length));
+
+    const dimension=root.getElementsByTagNameNS(NS,'dimension')[0];
+    if (dimension) {
+      const oldRef=dimension.getAttribute('ref');
+      oldRef && dimension.setAttribute('ref',oldRef.replace(/(\d+)$/,m=>String(Number(m)+extra)));
+    }
+  }
+
+  // Header 的公式保留；同步更新它們的 cached value，讓網站預覽先看到最新資料。
+  api.setFormula('D3','=建船資料檔!B6',meta.ship?.ship_name || '');
+  api.setFormula('F3','=建船資料檔!B7',meta.voyage || '');
+  api.setFormula('H3','=建船資料檔!B8',meta.ship?.call_sign || '');
+  api.setFormula('J3','=建船資料檔!B9',meta.ship?.captain_name || '');
+  api.setFormula('L3','=建船資料檔!B10',meta.registration || '');
+  api.setFormula('F6','=建船資料檔!B11',meta.ship?.gross_net_tonnage || '');
+  // 目前正式 Template 的主格為 J6（預定到港時間）與 L6（繫泊時間）。
+  // 匯出維持 Template 原本公式位置，只更新公式快取結果。
+  api.setFormula('J6','=建船資料檔!B12',toRocDate(meta.arrivalDate));
+  api.setFormula('L6','=J6',toRocDate(meta.arrivalDate));
+
+  const blankCols=['A','B','C','D','E','H','I','J','K','P','S','T','U','V','W','X','Z','AA'];
+  if (items.length<templateCount) {
+    for (let row=templateStart+items.length;row<templateStart+templateCount;row++) {
+      for (const col of blankCols) api.clearValue(`${col}${row}`);
+      // F:G 是公式合併格，不清除 F。
+      // K:M 是收貨人合併格，清除 K 即可。
+    }
+  }
+
+  const taxIdShown=new Set();
+  items.forEach((it,i)=>{
+    const row=templateStart+i;
+    api.setValue(`A${row}`,it.billNo);
+    api.setValue(`B${row}`,it.sealNo);
+    api.setValue(`C${row}`,Number(it.pieces)||0);
+    api.setValue(`D${row}`,it.unit);
+    // E = 貨櫃國際碼，例如 TCNU9125529；P = 封條，例如 200405。
+    api.setValue(`E${row}`,it.trackNo || '');
+
+    // F:G 是 Template 原本的公式，不能改成一般文字。
+    const formula=`T${row}&"  "&E${row}&"/"&U${row}&"/"&V${row}&"/"&P${row}`;
+    const formulaResult=`EXPRESS PACKAGE  ${it.trackNo || ''}/${it.mappedType || ''}/2/${it.sealNumRaw || ''}`;
+    api.setFormula(`F${row}`,`=${formula}`,formulaResult);
+
+    api.setValue(`H${row}`,`R:${loc}\nT:KNH0010W\nL:CNXMN`);
+    api.setValue(`I${row}`,Number(it.weight)||0);
+    api.setValue(`J${row}`,'KGS');
+
+    // K:M 是新版 Template 的合併儲存格，K 才是 master cell。
+    api.setValue(`K${row}`,it.consigneeInfo);
+
+    // N~V 依最新範本的欄位定義：
+    // N=(1)、O=收貨人名稱(英文)、P=封條、Q=台灣通知人、
+    // R=統一編號、S=收貨人中文簡稱、T=EXPRESS PACKAGE、U=櫃型、V=2。
+    api.setValue(`N${row}`,it.remark || '(1)');
+    // O 欄顯示 Supabase 實際收貨人名稱，避免文件中的 LIMITED 拼法
+    // 蓋掉資料庫既有的正確 LINITED 名稱；比對邏輯本身不變。
+    api.setValue(`O${row}`, it.matchedDbConsigneeName || it.consigneeName || '');
+    api.setValue(`P${row}`,it.sealNumRaw || '');
+
+    // Q 欄規則：先完成「收貨人＋卸存地」的 DB 匹配，並依既有規則
+    // 決定 match（非 T6 多筆時已用 Excel N 欄消歧；T6 則直接採 DB）。
+    // 台灣通知人與收貨人相同 → SAME AS CONSIGNEE；不同 → 顯示 DB 的台灣通知人。
+    const qNotify = String(it.taiwanNotifyName || '').trim();
+    const qValue = isSameConsigneeAndTaiwanNotify(it.consigneeName, qNotify)
+      ? 'SAME AS CONSIGNEE\n'
+      : qNotify;
+    api.setValue(`Q${row}`, qValue);
+
+    if (!taxIdShown.has(it.consigneeShort)) {
+      api.setValue(`R${row}`,it.taxId || '');
+      taxIdShown.add(it.consigneeShort);
+    } else {
+      api.setValue(`R${row}`,'');
+    }
+
+    api.setValue(`S${row}`,it.shortName || '');
+    api.setValue(`T${row}`,'EXPRESS PACKAGE');
+    api.setValue(`U${row}`,it.mappedType);
+    api.setValue(`V${row}`,2);
+  });
+
+  // 合計列：保留「公式」而不是把公式覆蓋成固定數字。
+  const totalRow=templateStart+items.length;
+  const totalPieces=items.reduce((sum,it)=>sum+(parseInt(it.pieces)||0),0);
+  const totalWeight=items.reduce((sum,it)=>sum+(parseFloat(it.weight)||0),0);
+  const lastDataRow=templateStart+items.length-1;
+  api.setValue(`A${totalRow}`,'合計');
+  api.setFormula(`C${totalRow}`,`=SUM(C${templateStart}:C${lastDataRow})`,totalPieces);
+  api.setValue(`D${totalRow}`,items[0]?items[0].unit:'PKG');
+  api.setFormula(`I${totalRow}`,`=SUM(I${templateStart}:J${lastDataRow})`,totalWeight);
+
+  // 更新艙單的 Print Area。新版 Template 1 筆時是 A1:N19；每增加 1 筆，固定區往下推 1 列。
+  const newPrintEnd=19+Math.max(0,items.length-1);
+  const definedNames=workbookXml.getElementsByTagNameNS(NS,'definedName');
+  for (const dn of Array.from(definedNames)) {
+    if (dn.getAttribute('name')==='_xlnm.Print_Area' && String(dn.textContent||'').includes('進口艙單印1份')) {
+      dn.textContent=`'進口艙單印1份'!$A$1:$N$${newPrintEnd}`;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════
+  // 第一階段：只處理 T1 快遞貨物訊息
+  // 其他工作表（准單、准單申請、貨櫃清單、運送單）完全不修改。
+  // T1 範本現在只提供第 3 列 1 筆資料；第 4 列起是空白預留列。
+  // 超過 1 筆時，以第 3 列為唯一母版重新建立資料列。
+  // ═══════════════════════════════════════════════════════════════════
+  async function loadSheetXmlByName(sheetName) {
+    const target = getSheetTarget(sheetName);
+    const xml = parser.parseFromString(await zip.file(target).async('text'),'application/xml');
+    return { target, xml, api: sheetApi(xml) };
+  }
+
+  const t1 = await loadSheetXmlByName('T1快遞貨物訊息');
+  const t1Start = 3;
+  const t1TemplateCount = 1;
+  const t1Extra = Math.max(0, items.length - t1TemplateCount);
+
+  // 最新 Template 的 T1 只有第 3 列 1 筆資料，且目前沒有設定列印範圍、也沒有第 4 列固定內容。
+  // 因此超過 1 筆時，只需把第 3 列的完整格式複製到第 4、5、6... 列，不能再要求「第 4 列固定內容」。
+  if (t1Extra > 0) {
+    const sourceRow = t1.api.getRow(t1Start);
+    if (!sourceRow) throw new Error('T1 範本找不到第 3 列資料樣板');
+    const sheetDataEl = t1.xml.documentElement.getElementsByTagNameNS(NS,'sheetData')[0];
+    if (!sheetDataEl) throw new Error('T1 範本找不到 sheetData');
+
+    // 最新 Template 的 T1 第4列以後只是空白預留列，並不是固定內容。
+    // 先移除這些舊的空白列，再依第3列母版重新建立第4、5、6...列。
+    // 這樣可以避免同一個 row r 同時存在兩份，造成 Excel 開啟時修復 sheet3.xml。
+    for (const row of Array.from(sheetDataEl.getElementsByTagNameNS(NS,'row'))) {
+      const n = Number(row.getAttribute('r'));
+      if (n >= t1Start + 1) sheetDataEl.removeChild(row);
+    }
+
+    // 每增加1筆，複製第3列的完整格式到下一列。
+    for (let i = 0; i < t1Extra; i++) {
+      const newRow = t1Start + 1 + i;
+      const clone = sourceRow.cloneNode(true);
+      clone.setAttribute('r', String(newRow));
+
+      for (const cell of Array.from(clone.getElementsByTagNameNS(NS,'c'))) {
+        const oldRef = cell.getAttribute('r');
+        if (!oldRef) continue;
+        const ref = splitRef(oldRef);
+        cell.setAttribute('r', `${ref.col}${newRow}`);
+
+        const f = cell.getElementsByTagNameNS(NS,'f')[0];
+        if (f) {
+          // 第3列原本引用艙單第16列；第4、5、6...列依序引用艙單第17、18、19...列。
+          const manifestRow = 16 + (newRow - t1Start);
+          f.textContent = f.textContent.replace(/([A-Z]{1,3})16\b/g, (_, col) => `${col}${manifestRow}`);
+          for (const v of Array.from(cell.getElementsByTagNameNS(NS,'v'))) cell.removeChild(v);
+          const v = t1.xml.createElementNS(NS,'v');
+          v.textContent = '';
+          cell.appendChild(v);
+        } else {
+          // 新資料列保留第3列的 style，只清除範例資料。
+          while (cell.firstChild) cell.removeChild(cell.firstChild);
+          cell.removeAttribute('t');
+        }
+      }
+      sheetDataEl.appendChild(clone);
+    }
+  }
+
+  // T1 每一筆都依照艙單資料列重新設定公式／內容。
+  // F=中文全名 + 英文名稱；H=收貨人管理的聯絡人資訊；K=艙單 P 欄封條。
+  for (let i = 0; i < items.length; i++) {
+    const r = t1Start + i;
+    const mrow = 16 + i;
+    const it = items[i];
+
+    t1.api.setFormula(`A${r}`, `=進口艙單印1份!B${mrow}`, it.billNo || '');
+    t1.api.setFormula(`B${r}`, `=進口艙單印1份!A${mrow}`, it.sealNo || '');
+    t1.api.setFormula(`D${r}`, `=進口艙單印1份!E${mrow}`, it.trackNo || '');
+
+    // E 欄原始 Template 是引用貨櫃清單；本階段不修改其資料來源，
+    // 等第四階段處理貨櫃清單時再同步處理。
+    const cargoRow = 9 + i * 2;
+    t1.api.setFormula(`E${r}`, `='貨櫃清單-1份'!J${cargoRow}`, '');
+
+    const consigneeDisplayName = [it.chineseName, it.consigneeName].filter(Boolean).join('\n');
+    t1.api.setValue(`F${r}`, consigneeDisplayName);
+    t1.api.setValue(`G${r}`, it.taxId || '');
+    t1.api.setValue(`H${r}`, it.contactInfo || '');
+    t1.api.setValue(`I${r}`, loc);
+    t1.api.setFormula(`J${r}`, `=IF(進口艙單印1份!U${mrow}="45G1","40HQ","")`, '');
+    t1.api.setFormula(`K${r}`, `=進口艙單印1份!P${mrow}`, it.sealNumRaw || '');
+  }
+
+  // T1 原本的篩選範圍 A2:A4 也跟著資料筆數延伸。
+  for (const dn of Array.from(workbookXml.getElementsByTagNameNS(NS,'definedName'))) {
+    if (dn.getAttribute('name') === '_xlnm._FilterDatabase' && Number(dn.getAttribute('localSheetId')) === 2) {
+      dn.textContent = `T1快遞貨物訊息!$A$2:$A$${2 + items.length}`;
+    }
+  }
+
+  const t1Dimension = t1.xml.documentElement.getElementsByTagNameNS(NS,'dimension')[0];
+  if (t1Dimension) {
+    const old = t1Dimension.getAttribute('ref');
+    const match = old && old.match(/^(.*:.*?)(\d+)$/);
+    if (match) t1Dimension.setAttribute('ref', `${match[1]}${Math.max(3, 3 + t1Extra)}`);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 第二階段：只處理「准單(紅紙)-2份」
+  // 依艙單筆數增加貨物資料列；公式完全沿用最新 Template 的寫法，
+  // 只把公式中的艙單資料列號從 16/17/18 往後延伸。
+  // Template 現在資料列為第22列，第23列起為固定內容。
+  // ═══════════════════════════════════════════════════════════════════
+  const red = await loadSheetXmlByName('准單(紅紙)-2份');
+  const redStart = 22;
+  const redTemplateCount = 1;
+  const redExtra = Math.max(0, items.length - redTemplateCount);
+  const redFooterStart = 23;
+
+  if (redExtra > 0) {
+    if (!red.api.getRow(redFooterStart)) throw new Error('准單（紅紙）範本找不到第 23 列固定內容');
+
+    // 將第23列以後固定內容整體往下移，包含原有合併儲存格。
+    shiftRowsAndMerges(red.xml, redFooterStart, redExtra);
+    const redFooterAfter = red.api.getRow(redFooterStart + redExtra);
+    if (!redFooterAfter) throw new Error('准單（紅紙）固定內容移動失敗');
+
+    const sourceRow = red.api.getRow(22);
+    if (!sourceRow) throw new Error('准單（紅紙）範本找不到第 22 列資料樣板');
+    const sheetDataEl = red.xml.documentElement.getElementsByTagNameNS(NS,'sheetData')[0];
+    if (!sheetDataEl) throw new Error('准單（紅紙）找不到 sheetData');
+
+    const mergeCellsEl = red.xml.documentElement.getElementsByTagNameNS(NS,'mergeCells')[0];
+    const originalMerges = mergeCellsEl
+      ? Array.from(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell')).map(x => x.getAttribute('ref'))
+      : [];
+    const dataMerges = originalMerges.filter(ref => {
+      const nums = (String(ref).match(/\d+/g) || []).map(Number);
+      return nums.length && Math.min(...nums) === 22 && Math.max(...nums) === 22;
+    });
+
+    for (let i = 0; i < redExtra; i++) {
+      const newRow = 23 + i;
+      const clone = sourceRow.cloneNode(true);
+      clone.setAttribute('r', String(newRow));
+
+      for (const cell of Array.from(clone.getElementsByTagNameNS(NS,'c'))) {
+        const oldRef = cell.getAttribute('r');
+        if (!oldRef) continue;
+        const ref = splitRef(oldRef);
+        cell.setAttribute('r', `${ref.col}${newRow}`);
+
+        const f = cell.getElementsByTagNameNS(NS,'f')[0];
+        if (f) {
+          // Template 第22列公式引用艙單第16列；第23列起依序引用17、18……。
+          const manifestRow = 16 + (newRow - redStart);
+          f.textContent = f.textContent.replace(
+            /進口艙單印1份!([A-Z]{1,3})16\b/g,
+            (_, col) => `進口艙單印1份!${col}${manifestRow}`
+          );
+          // 讓 Excel 重新計算；避免保留舊的公式快取。
+          for (const v of Array.from(cell.getElementsByTagNameNS(NS,'v'))) cell.removeChild(v);
+          const v = red.xml.createElementNS(NS,'v');
+          v.textContent = '';
+          cell.appendChild(v);
+        }
+      }
+      sheetDataEl.insertBefore(clone, redFooterAfter);
+
+      if (mergeCellsEl) {
+        for (const ref of dataMerges) {
+          const shifted = ref.replace(/(\d+)/g, m => String(Number(m) + i + 1));
+          const exists = Array.from(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell'))
+            .some(mc => mc.getAttribute('ref') === shifted);
+          if (!exists) {
+            const mc = red.xml.createElementNS(NS,'mergeCell');
+            mc.setAttribute('ref', shifted);
+            mergeCellsEl.appendChild(mc);
+          }
+        }
+      }
+    }
+    if (mergeCellsEl) mergeCellsEl.setAttribute('count', String(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell').length));
+  }
+
+  // 紅紙 C6：Template 原本是範例船名（例如「大佑輪」），
+  // 本次作業應改成目前卸存地所輸入的二程船名稱。
+  const redShip2Name = (manifestByLocation[loc] && manifestByLocation[loc].ship2Name) || '';
+  red.api.setValue('C6', redShip2Name);
+
+  // 紅紙 C10:D13：Template 為合併儲存格，實際資料寫入左上角 C10。
+  // 本次作業應帶入目前網站上選擇／輸入的卸存地。
+  red.api.setValue('C10', loc);
+
+  // 紅紙 G19:I19（Template 的實際合併範圍；使用左上角 G19）：
+  // 依網站目前選擇／輸入的卸存地，更新「10.其他」的轉運說明。
+  // T6（003C2002、003C2031）不加括號，直接帶入卸存地。
+  const redOtherText = (() => {
+    const normalizedLoc = normalizeLocationCode(loc);
+    const transferPortMap = {
+      'KHH0638S': '轉運至高雄港',
+      'KHH0641S': '轉運至高雄港',
+      'TPEE011S': '轉運至台北港',
+      'TPEE021S': '轉運至台北港',
+      'TPEN051S': '轉運至台北港',
+      'TXG018DH': '轉運至台中港'
+    };
+
+    if (['003C2002', '003C2031'].includes(normalizedLoc)) {
+      return `10.其他:過境台北港辦理儀檢後運往${normalizedLoc}`;
+    }
+
+    const transferPort = transferPortMap[normalizedLoc];
+    if (transferPort) {
+      return `10.其他:${transferPort}(${normalizedLoc} )`;
+    }
+
+    // 未列入對照表的卸存地先維持 Template 原本內容，避免影響既有功能。
+    return '';
+  })();
+  if (redOtherText) red.api.setValue('G19', redOtherText);
+
+  // 逐筆確認准單（紅紙）22列起的公式，完全按照 Template 原本公式模式，
+  // 只將艙單來源列號由16、17、18依筆數延伸。
+  for (let i = 0; i < items.length; i++) {
+    const r = redStart + i;
+    const mrow = 16 + i;
+    red.api.setFormula(`A${r}`, `=進口艙單印1份!B${mrow}`, '');
+    red.api.setFormula(`C${r}`, `=進口艙單印1份!T${mrow}`, '');
+    red.api.setFormula(`F${r}`, `=進口艙單印1份!C${mrow}&進口艙單印1份!D${mrow}`, '');
+    red.api.setFormula(`H${r}`, `=進口艙單印1份!I${mrow}`, '');
+    red.api.setFormula(`I${r}`, `=進口艙單印1份!E${mrow}`, '');
+  }
+
+  const redDimension = red.xml.documentElement.getElementsByTagNameNS(NS,'dimension')[0];
+  if (redDimension && redDimension.getAttribute('ref')) {
+    const old = redDimension.getAttribute('ref');
+    redDimension.setAttribute('ref', old.replace(/(\d+)$/, m => String(Number(m) + redExtra)));
+  }
+
+  // 紅紙列印範圍也跟著新增資料列往下延伸。
+  // Template 1 筆時為 A1:I29；每增加 1 筆，固定區往下 1 列。
+  // 因此 5 筆時為 A1:I33。
+  const redPrintEnd = 29 + Math.max(0, items.length - 1);
+  for (const dn of Array.from(workbookXml.getElementsByTagNameNS(NS,'definedName'))) {
+    const name = dn.getAttribute('name');
+    const localSheetId = dn.getAttribute('localSheetId');
+    const text = String(dn.textContent || '');
+    if (name === '_xlnm.Print_Area' && text.includes('准單(紅紙)-2份')) {
+      dn.textContent = `'准單(紅紙)-2份'!$A$1:$I$${redPrintEnd}`;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 第三階段：只處理「准單申請-1份 」
+  // 依艙單筆數增加資料列；資料列只有第22列 1 筆，
+  // 第23列起為固定內容。新增列完全沿用第22列的格式、公式與合併結構。
+  // 公式以最新 Template 為準，並只將來源的紅紙列號由22往後延伸。
+  // ═══════════════════════════════════════════════════════════════════
+  const application = await loadSheetXmlByName('准單申請-1份 ');
+  const appStart = 22;
+  const appTemplateCount = 1;
+  const appExtra = Math.max(0, items.length - appTemplateCount);
+  const appFooterStart = 23;
+
+  if (!application.api.getRow(appFooterStart)) {
+    throw new Error('准單申請範本找不到第 23 列固定內容');
+  }
+
+  if (appExtra > 0) {
+    shiftRowsAndMerges(application.xml, appFooterStart, appExtra);
+    const appFooterAfter = application.api.getRow(appFooterStart + appExtra);
+    if (!appFooterAfter) throw new Error('准單申請固定內容移動失敗');
+
+    const sourceRow = application.api.getRow(22);
+    if (!sourceRow) throw new Error('准單申請範本找不到第 22 列資料樣板');
+    const sheetDataEl = application.xml.documentElement.getElementsByTagNameNS(NS,'sheetData')[0];
+    if (!sheetDataEl) throw new Error('准單申請找不到 sheetData');
+
+    const mergeCellsEl = application.xml.documentElement.getElementsByTagNameNS(NS,'mergeCells')[0];
+    const originalMerges = mergeCellsEl
+      ? Array.from(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell')).map(x => x.getAttribute('ref'))
+      : [];
+    const dataMerges = originalMerges.filter(ref => {
+      const nums = (String(ref).match(/\d+/g) || []).map(Number);
+      return nums.length && Math.min(...nums) === 22 && Math.max(...nums) === 22;
+    });
+
+    for (let i = 0; i < appExtra; i++) {
+      const newRow = 23 + i;
+      const clone = sourceRow.cloneNode(true);
+      clone.setAttribute('r', String(newRow));
+
+      for (const cell of Array.from(clone.getElementsByTagNameNS(NS,'c'))) {
+        const oldRef = cell.getAttribute('r');
+        if (!oldRef) continue;
+        const ref = splitRef(oldRef);
+        cell.setAttribute('r', `${ref.col}${newRow}`);
+
+        const f = cell.getElementsByTagNameNS(NS,'f')[0];
+        if (f) {
+          // Template 第24列引用紅紙第24列；新增列依序引用紅紙第25、26……列。
+          const redRow = 22 + (newRow - appStart);
+          f.textContent = f.textContent.replace(
+            /'准單\(紅紙\)-2份'!([A-Z]{1,3})22\b/g,
+            (_, col) => `'准單(紅紙)-2份'!${col}${redRow}`
+          );
+          // 清除舊的公式快取，讓 Excel 重新計算。
+          for (const v of Array.from(cell.getElementsByTagNameNS(NS,'v'))) cell.removeChild(v);
+          const v = application.xml.createElementNS(NS,'v');
+          v.textContent = '';
+          cell.appendChild(v);
+        }
+      }
+      sheetDataEl.insertBefore(clone, appFooterAfter);
+
+      if (mergeCellsEl) {
+        for (const ref of dataMerges) {
+          const shifted = ref.replace(/(\d+)/g, m => String(Number(m) + i + 1));
+          const exists = Array.from(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell'))
+            .some(mc => mc.getAttribute('ref') === shifted);
+          if (!exists) {
+            const mc = application.xml.createElementNS(NS,'mergeCell');
+            mc.setAttribute('ref', shifted);
+            mergeCellsEl.appendChild(mc);
+          }
+        }
+      }
+    }
+    if (mergeCellsEl) mergeCellsEl.setAttribute('count', String(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell').length));
+  }
+
+  // 每一筆都直接沿用最新 Template 的公式模式，只改來源紅紙列號。
+  for (let i = 0; i < items.length; i++) {
+    const r = appStart + i;
+    const redRow = 22 + i;
+    application.api.setFormula(`A${r}`, `='准單(紅紙)-2份'!A${redRow}:B${redRow}`, '');
+    application.api.setFormula(`C${r}`, `='准單(紅紙)-2份'!C${redRow}:E${redRow}`, '');
+    application.api.setFormula(`F${r}`, `='准單(紅紙)-2份'!F${redRow}:H${redRow}`, '');
+    application.api.setFormula(`H${r}`, `='准單(紅紙)-2份'!H${redRow}`, '');
+    application.api.setFormula(`I${r}`, `='准單(紅紙)-2份'!I${redRow}:J${redRow}`, '');
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 第四階段：只處理「貨櫃清單-1份」
+  // Template 原本 3 筆，每筆佔 2 列：
+  // 第1筆 9~10、第2筆 11~12、第3筆 13~14。
+  // 第15列起為固定內容。超過3筆時，每增加1筆就增加2列，
+  // 並完整沿用 Template 第13~14列的格式、合併儲存格與公式。
+  // ═══════════════════════════════════════════════════════════════════
+  const cargo = await loadSheetXmlByName('貨櫃清單-1份');
+  const cargoStart = 9;
+  const cargoTemplateCount = 1;
+  const cargoExtra = Math.max(0, items.length - cargoTemplateCount);
+  const cargoFooterStart = 11;
+  const cargoRowsPerItem = 2;
+
+  if (!cargo.api.getRow(cargoFooterStart)) {
+    throw new Error('貨櫃清單範本找不到第 11 列固定內容');
+  }
+
+  if (cargoExtra > 0) {
+    const cargoShift = cargoExtra * cargoRowsPerItem;
+
+    // 固定內容（倉儲業、船公司簽章、頁碼）整體往下移。
+    shiftRowsAndMerges(cargo.xml, cargoFooterStart, cargoShift);
+
+    const cargoFooterAfter = cargo.api.getRow(cargoFooterStart + cargoShift);
+    if (!cargoFooterAfter) throw new Error('貨櫃清單固定內容移動失敗');
+
+    const sourceRow1 = cargo.api.getRow(9);
+    const sourceRow2 = cargo.api.getRow(10);
+    if (!sourceRow1 || !sourceRow2) {
+      throw new Error('貨櫃清單範本找不到第 9、10 列資料樣板');
+    }
+
+    const sheetDataEl = cargo.xml.documentElement.getElementsByTagNameNS(NS,'sheetData')[0];
+    if (!sheetDataEl) throw new Error('貨櫃清單找不到 sheetData');
+
+    const mergeCellsEl = cargo.xml.documentElement.getElementsByTagNameNS(NS,'mergeCells')[0];
+    const originalMerges = mergeCellsEl
+      ? Array.from(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell')).map(x => x.getAttribute('ref'))
+      : [];
+
+    // 第9~10列的所有合併，例如 A9:A10、B9:B10、...、J9:J10。
+    const dataMerges = originalMerges.filter(ref => {
+      const nums = (String(ref).match(/\d+/g) || []).map(Number);
+      return nums.length && Math.min(...nums) >= 9 && Math.max(...nums) <= 10;
+    });
+
+    // 每增加一筆，複製一組 2 列。
+    for (let i = 0; i < cargoExtra; i++) {
+      const newRow1 = 11 + i * 2;
+      const newRow2 = newRow1 + 1;
+      const manifestRow = 16 + cargoTemplateCount + i;
+
+      const clone1 = sourceRow1.cloneNode(true);
+      const clone2 = sourceRow2.cloneNode(true);
+      clone1.setAttribute('r', String(newRow1));
+      clone2.setAttribute('r', String(newRow2));
+
+      // 將兩列的儲存格座標改成新列號，公式則依 Template 第13/14列的公式
+      // 往艙單下一筆延伸。
+      for (const [clone, newRow] of [[clone1, newRow1], [clone2, newRow2]]) {
+        for (const cell of Array.from(clone.getElementsByTagNameNS(NS,'c'))) {
+          const oldRef = cell.getAttribute('r');
+          if (!oldRef) continue;
+
+          const ref = splitRef(oldRef);
+          cell.setAttribute('r', `${ref.col}${newRow}`);
+
+          const f = cell.getElementsByTagNameNS(NS,'f')[0];
+          if (f) {
+            f.textContent = f.textContent.replace(
+              /進口艙單印1份!([A-Z]{1,3})16\b/g,
+              (_, col) => `進口艙單印1份!${col}${manifestRow}`
+            );
+
+            // 清除舊公式快取，讓 Excel 開啟時重新計算。
+            for (const v of Array.from(cell.getElementsByTagNameNS(NS,'v'))) {
+              cell.removeChild(v);
+            }
+            const v = cargo.xml.createElementNS(NS,'v');
+            v.textContent = '';
+            cell.appendChild(v);
+          }
+        }
+      }
+
+      sheetDataEl.insertBefore(clone1, cargoFooterAfter);
+      sheetDataEl.insertBefore(clone2, cargoFooterAfter);
+
+      // 複製第13~14列原本的合併結構到新的兩列。
+      if (mergeCellsEl) {
+        for (const ref of dataMerges) {
+          const shifted = ref.replace(
+            /(\d+)/g,
+            m => String(Number(m) + (newRow1 - 9))
+          );
+          const exists = Array.from(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell'))
+            .some(mc => mc.getAttribute('ref') === shifted);
+
+          if (!exists) {
+            const mc = cargo.xml.createElementNS(NS,'mergeCell');
+            mc.setAttribute('ref', shifted);
+            mergeCellsEl.appendChild(mc);
+          }
+        }
+      }
+    }
+
+    if (mergeCellsEl) {
+      mergeCellsEl.setAttribute(
+        'count',
+        String(mergeCellsEl.getElementsByTagNameNS(NS,'mergeCell').length)
+      );
+    }
+  }
+
+  // 每一筆資料都依照最新 Template 原本的公式模式，
+  // 只將艙單來源列號由16、17、18往後延伸。
+  // 第一列是項次與主要資料；第二列是同一貨櫃的延伸資料。
+  for (let i = 0; i < items.length; i++) {
+    const r1 = cargoStart + i * 2;
+    const r2 = r1 + 1;
+    const mrow = 16 + i;
+
+    cargo.api.setValue(`A${r1}`, i + 1);
+
+    cargo.api.setFormula(`B${r1}`, `=進口艙單印1份!E${mrow}`, '');
+    cargo.api.setFormula(`C${r1}`, `=進口艙單印1份!P${mrow}`, '');
+    cargo.api.setFormula(`D${r1}`, `=進口艙單印1份!B${mrow}`, '');
+    cargo.api.setFormula(`E${r1}`, `=進口艙單印1份!C${mrow}`, '');
+    cargo.api.setFormula(`F${r1}`, `=進口艙單印1份!D${mrow}`, '');
+    cargo.api.setFormula(`G${r1}`, `=B${r1}`, '');
+    cargo.api.setFormula(`H${r1}`, `=進口艙單印1份!U${mrow}`, '');
+
+    // 第二列 G 欄是範例原本的公式：抓艙單 I 欄重量。
+    cargo.api.setFormula(`G${r2}`, `=進口艙單印1份!I${mrow}`, '');
+
+    // J 欄依 Template 原本固定為 ESN500；I 欄進出站註記保留範例狀態。
+    cargo.api.setValue(`J${r1}`, 'ESN500');
+  }
+
+  // Template 1筆時為 A1:J15；每增加1筆貨櫃會增加2列。
+  const cargoPrintEnd = 15 + Math.max(0, items.length - 1) * cargoRowsPerItem;
+  for (const dn of Array.from(workbookXml.getElementsByTagNameNS(NS,'definedName'))) {
+    const name = dn.getAttribute('name');
+    const text = String(dn.textContent || '');
+    if (name === '_xlnm.Print_Area' && text.includes('貨櫃清單-1份')) {
+      dn.textContent = `'貨櫃清單-1份'!$A$1:$J$${cargoPrintEnd}`;
+    }
+  }
+
+  const cargoDimension = cargo.xml.documentElement.getElementsByTagNameNS(NS,'dimension')[0];
+  if (cargoDimension && cargoDimension.getAttribute('ref')) {
+    const old = cargoDimension.getAttribute('ref');
+    cargoDimension.setAttribute(
+      'ref',
+      old.replace(/(\d+)$/, m => String(Number(m) + cargoExtra * cargoRowsPerItem))
+    );
+  }
+
+  const appDimension = application.xml.documentElement.getElementsByTagNameNS(NS,'dimension')[0];
+  if (appDimension && appDimension.getAttribute('ref')) {
+    const old = appDimension.getAttribute('ref');
+    appDimension.setAttribute('ref', old.replace(/(\d+)$/, m => String(Number(m) + appExtra)));
+  }
+
+  // 准單申請 Template 1 筆時列印範圍為 A1:I33；每增加 1 筆，最後一列 +1。
+  const appPrintEnd = 33 + Math.max(0, items.length - 1);
+  for (const dn of Array.from(workbookXml.getElementsByTagNameNS(NS,'definedName'))) {
+    const name = dn.getAttribute('name');
+    const text = String(dn.textContent || '');
+    if (name === '_xlnm.Print_Area' && text.includes('准單申請-1份')) {
+      dn.textContent = `'准單申請-1份 '!$A$1:$I$${appPrintEnd}`;
+    }
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 第五階段：運送單
+  // Template 現在只提供「運送第1筆」一張母版。
+  // 第1筆直接使用 Template；第2筆起複製「運送第1筆」建立新工作表。
+  // 每張工作表固定列印 A1:N41。
+  // ═══════════════════════════════════════════════════════════════════
+  const transportTemplateCount = 1;
+  const transportExtra = Math.max(0, items.length - transportTemplateCount);
+  const transportSource = getWorksheetSheetInfo('運送第1筆');
+  const sheetsEl = workbookXml.getElementsByTagNameNS(NS, 'sheets')[0];
+  if (!sheetsEl) throw new Error('workbook.xml 找不到 sheets');
+
+  // 取得目前最大的 sheetId / relationship Id，新增工作表時遞增。
+  let maxSheetId = 0;
+  for (const s of Array.from(sheetsEl.getElementsByTagNameNS(NS, 'sheet'))) {
+    maxSheetId = Math.max(maxSheetId, Number(s.getAttribute('sheetId')) || 0);
+  }
+  let maxRidNum = 0;
+  for (const r of Array.from(relsXml.getElementsByTagName('Relationship'))) {
+    const m = String(r.getAttribute('Id') || '').match(/^rId(\d+)$/);
+    if (m) maxRidNum = Math.max(maxRidNum, Number(m[1]));
+  }
+
+  const ctFileTransport = zip.file('[Content_Types].xml');
+  const ctXmlTransport = ctFileTransport
+    ? parser.parseFromString(await ctFileTransport.async('text'), 'application/xml')
+    : null;
+
+  // 以第1張 Template 運送單為母版；它本身是第1筆，所以公式基準是艙單第16列、貨櫃清單第9列。
+  const sourceTransportXml = parser.parseFromString(
+    await zip.file(transportSource.target).async('text'),
+    'application/xml'
+  );
+
+  for (let i = 0; i < transportExtra; i++) {
+    const itemIndex = transportTemplateCount + i; // 0-based，第2筆開始
+    const sheetNumber = itemIndex + 1;
+    const newName = `運送第${sheetNumber}筆`;
+    const newSheetId = ++maxSheetId;
+    const newRid = `rId${++maxRidNum}`;
+    const newTarget = `xl/worksheets/sheet${newSheetId}.xml`;
+    const newLocalSheetId = Array.from(sheetsEl.getElementsByTagNameNS(NS, 'sheet')).length;
+
+    // 防止重複名稱（若 Template 未來已經有同名工作表，就直接報明確錯誤）。
+    if (Array.from(sheetsEl.getElementsByTagNameNS(NS, 'sheet'))
+      .some(s => s.getAttribute('name') === newName)) {
+      throw new Error(`運送單工作表名稱重複：${newName}`);
+    }
+
+    const newXml = sourceTransportXml.cloneNode(true);
+    const root = newXml.documentElement;
+
+    // 公式來源列：
+    // 第2筆 → 艙單17、貨櫃清單11
+    // 第3筆 → 艙單18、貨櫃清單13
+    const manifestRow = 16 + itemIndex;
+    const cargoRow = 9 + itemIndex * 2;
+
+    for (const cell of Array.from(root.getElementsByTagNameNS(NS, 'c'))) {
+      const f = cell.getElementsByTagNameNS(NS, 'f')[0];
+      if (!f || f.textContent == null) continue;
+
+      let formula = f.textContent;
+      // 母版「運送第1筆」對應艙單第16列、貨櫃清單第9列。
+      formula = formula.replace(/(進口艙單印1份![A-Z]{1,3})16\b/g, `$1${manifestRow}`);
+      formula = formula.replace(/('貨櫃清單-1份'![A-Z]{1,3})9\b/g, `$1${cargoRow}`);
+
+      f.textContent = formula;
+
+      // 公式快取清空，讓 Excel 開啟時依新的來源重新計算。
+      for (const v of Array.from(cell.getElementsByTagNameNS(NS, 'v'))) {
+        cell.removeChild(v);
+      }
+      const v = newXml.createElementNS(NS, 'v');
+      v.textContent = '';
+      cell.appendChild(v);
+    }
+
+    // 維持 A1:P41 的 Template dimension；列印範圍則明確設定為 A1:N41。
+    const dimension = root.getElementsByTagNameNS(NS, 'dimension')[0];
+    if (dimension) dimension.setAttribute('ref', 'A1:P41');
+
+    // 寫入新的 worksheet XML。
+    zip.file(newTarget, serializer.serializeToString(newXml));
+
+    // 複製 Template 第1張運送單的 worksheet relationship。
+    const sourceRelPath = `xl/worksheets/_rels/${transportSource.target.split('/').pop()}.rels`;
+    const newRelPath = `xl/worksheets/_rels/sheet${newSheetId}.xml.rels`;
+    const sourceRelFile = zip.file(sourceRelPath);
+    if (sourceRelFile) {
+      zip.file(newRelPath, await sourceRelFile.async('text'));
+    }
+
+    // workbook.xml 新增 sheet。
+    const sheetNode = workbookXml.createElementNS(NS, 'sheet');
+    sheetNode.setAttribute('name', newName);
+    sheetNode.setAttribute('sheetId', String(newSheetId));
+    sheetNode.setAttributeNS(REL_NS, 'r:id', newRid);
+    sheetsEl.appendChild(sheetNode);
+
+    // workbook.xml.rels 新增 worksheet relationship。
+    const relNode = relsXml.createElementNS(
+      'http://schemas.openxmlformats.org/package/2006/relationships',
+      'Relationship'
+    );
+    relNode.setAttribute('Id', newRid);
+    relNode.setAttribute(
+      'Type',
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet'
+    );
+    relNode.setAttribute('Target', `worksheets/sheet${newSheetId}.xml`);
+    relsXml.documentElement.appendChild(relNode);
+
+    // 每一張運送單都有自己的 Print_Area：A1:N41。
+    const definedNamesEl = workbookXml.getElementsByTagNameNS(NS, 'definedNames')[0]
+      || workbookXml.appendChild(workbookXml.createElementNS(NS, 'definedNames'));
+
+    const printName = workbookXml.createElementNS(NS, 'definedName');
+    printName.setAttribute('name', '_xlnm.Print_Area');
+    printName.setAttribute('localSheetId', String(newLocalSheetId));
+    printName.textContent = `'${newName}'!$A$1:$N$41`;
+    definedNamesEl.appendChild(printName);
+
+    // [Content_Types].xml 新增這張 worksheet 的 Override。
+    if (ctXmlTransport) {
+      const override = ctXmlTransport.createElementNS(
+        'http://schemas.openxmlformats.org/package/2006/content-types',
+        'Override'
+      );
+      override.setAttribute('PartName', `/xl/worksheets/sheet${newSheetId}.xml`);
+      override.setAttribute(
+        'ContentType',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml'
+      );
+      ctXmlTransport.documentElement.appendChild(override);
+    }
+  }
+
+  // 寫回所有動態工作表；運送單第4筆起已在上方建立。
+  zip.file(t1.target, serializer.serializeToString(t1.xml));
+  zip.file(red.target, serializer.serializeToString(red.xml));
+  zip.file(application.target, serializer.serializeToString(application.xml));
+  zip.file(cargo.target, serializer.serializeToString(cargo.xml));
+  zip.file(shipTarget, serializer.serializeToString(shipXml));
+  zip.file(sheetTarget, serializer.serializeToString(sheetXml));
+  zip.file('xl/workbook.xml', serializer.serializeToString(workbookXml));
+  zip.file('xl/_rels/workbook.xml.rels', serializer.serializeToString(relsXml));
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 公式快取同步：避免 Excel「啟用編輯」前後顯示不同。
+  // 受保護的檢視可能直接顯示 <v> 裡的舊快取值；按下「啟用編輯」後，
+  // Excel 才會依公式重新計算，因此下載後會看到前後兩個畫面不同。
+  // 這裡在匯出前，依目前 XML 內的公式與資料重新建立可用的 cached value，
+  // 同時保留公式本身，讓「啟用編輯前」就能看到與重新計算後一致的內容。
+  // 目前 Template 使用到的公式類型包含：直接引用、& 串接、IF、SUM。
+  // ═══════════════════════════════════════════════════════════════════
+  const sharedStrings = [];
+  const sharedStringsFile = zip.file('xl/sharedStrings.xml');
+  if (sharedStringsFile) {
+    const ssXml = parser.parseFromString(await sharedStringsFile.async('text'), 'application/xml');
+    for (const si of Array.from(ssXml.getElementsByTagNameNS(NS, 'si'))) {
+      const parts = Array.from(si.getElementsByTagNameNS(NS, 't')).map(t => t.textContent || '');
+      sharedStrings.push(parts.join(''));
+    }
+  }
+
+  function splitFormulaArgs(text) {
+    const args = [];
+    let start = 0, depth = 0, inString = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '"') {
+        if (inString && text[i + 1] === '"') { i++; continue; }
+        inString = !inString;
+      } else if (!inString) {
+        if (ch === '(') depth++;
+        else if (ch === ')') depth--;
+        else if (ch === ',' && depth === 0) {
+          args.push(text.slice(start, i).trim());
+          start = i + 1;
+        }
+      }
+    }
+    args.push(text.slice(start).trim());
+    return args;
+  }
+
+  function splitTopLevel(text, operator) {
+    const parts = [];
+    let start = 0, depth = 0, inString = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '"') {
+        if (inString && text[i + 1] === '"') { i++; continue; }
+        inString = !inString;
+      } else if (!inString) {
+        if (ch === '(') depth++;
+        else if (ch === ')') depth--;
+        else if (ch === operator && depth === 0) {
+          parts.push(text.slice(start, i));
+          start = i + 1;
+        }
+      }
+    }
+    parts.push(text.slice(start));
+    return parts;
+  }
+
+  function unquoteExcelString(text) {
+    const s = String(text || '').trim();
+    if (s.length >= 2 && s[0] === '"' && s[s.length - 1] === '"') {
+      return s.slice(1, -1).replace(/""/g, '"');
+    }
+    return null;
+  }
+
+  function parseCellRefToken(token) {
+    const s = String(token || '').trim();
+    const m = s.match(/^(?:'((?:[^']|'')+)'|(.+?))!([A-Z]{1,3}\d+)$/i);
+    if (m) return { sheet: (m[1] || m[2]).replace(/''/g, "'"), ref: m[3].toUpperCase() };
+    const c = s.match(/^([A-Z]{1,3}\d+)$/i);
+    if (c) return { sheet: null, ref: c[1].toUpperCase() };
+    return null;
+  }
+
+  function getCellElement(sheetXml, ref) {
+    const m = String(ref).match(/^([A-Z]+)(\d+)$/i);
+    if (!m) return null;
+    const row = Array.from(sheetXml.getElementsByTagNameNS(NS, 'row'))
+      .find(r => r.getAttribute('r') === m[2]);
+    if (!row) return null;
+    return Array.from(row.getElementsByTagNameNS(NS, 'c'))
+      .find(c => c.getAttribute('r') === ref);
+  }
+
+  const formulaCacheSheets = new Map();
+  const formulaCacheValues = new Map();
+
+  async function loadAllWorksheetXml() {
+    const result = new Map();
+    for (const sheetEl of Array.from(workbookXml.getElementsByTagNameNS(NS, 'sheet'))) {
+      const name = sheetEl.getAttribute('name') || '';
+      const rid = sheetEl.getAttributeNS(REL_NS, 'id');
+      const rel = Array.from(relsXml.getElementsByTagName('Relationship'))
+        .find(x => x.getAttribute('Id') === rid);
+      if (!rel) continue;
+      let target = rel.getAttribute('Target').replace(/^\//, '');
+      if (!target.startsWith('xl/')) target = 'xl/' + target.replace(/^\.\//, '');
+      const file = zip.file(target);
+      if (!file) continue;
+      const xml = parser.parseFromString(await file.async('text'), 'application/xml');
+      result.set(name, { target, xml });
+    }
+    return result;
+  }
+
+  const allSheets = await loadAllWorksheetXml();
+  for (const [name, info] of allSheets) formulaCacheSheets.set(name, info.xml);
+
+  function readCellValue(sheetName, ref, stack) {
+    const key = `${sheetName}!${ref}`;
+    if (formulaCacheValues.has(key)) return formulaCacheValues.get(key);
+    if (stack.has(key)) return '';
+    const sheetXml = formulaCacheSheets.get(sheetName);
+    if (!sheetXml) return '';
+    const cell = getCellElement(sheetXml, ref);
+    if (!cell) return '';
+
+    const f = cell.getElementsByTagNameNS(NS, 'f')[0];
+    if (f && f.textContent != null) {
+      const nextStack = new Set(stack);
+      nextStack.add(key);
+      const value = evalFormula(f.textContent, sheetName, nextStack);
+      formulaCacheValues.set(key, value);
+      return value;
+    }
+
+    const inline = cell.getElementsByTagNameNS(NS, 'is')[0];
+    if (inline) {
+      const value = Array.from(inline.getElementsByTagNameNS(NS, 't')).map(t => t.textContent || '').join('');
+      formulaCacheValues.set(key, value);
+      return value;
+    }
+
+    const v = cell.getElementsByTagNameNS(NS, 'v')[0];
+    if (!v) return '';
+    const raw = v.textContent || '';
+    if (cell.getAttribute('t') === 's') {
+      const value = sharedStrings[Number(raw)] ?? '';
+      formulaCacheValues.set(key, value);
+      return value;
+    }
+    if (cell.getAttribute('t') === 'str') {
+      formulaCacheValues.set(key, raw);
+      return raw;
+    }
+    const num = Number(raw);
+    const value = Number.isFinite(num) ? num : raw;
+    formulaCacheValues.set(key, value);
+    return value;
+  }
+
+  function evalFormula(formulaText, currentSheet, stack) {
+    let expr = String(formulaText || '').trim();
+    if (expr.startsWith('=')) expr = expr.slice(1);
+
+    const quoted = unquoteExcelString(expr);
+    if (quoted !== null) return quoted;
+
+    const concatParts = splitTopLevel(expr, '&');
+    if (concatParts.length > 1) {
+      return concatParts.map(part => String(evalFormula(part, currentSheet, stack) ?? '')).join('');
+    }
+
+    const fn = expr.match(/^([A-Z]+)\((.*)\)$/i);
+    if (fn) {
+      const name = fn[1].toUpperCase();
+      const args = splitFormulaArgs(fn[2]);
+      if (name === 'IF') {
+        const condition = String(args[0] || '').trim();
+        const eqParts = splitTopLevel(condition, '=');
+        let ok = false;
+        if (eqParts.length === 2) {
+          const left = evalFormula(eqParts[0], currentSheet, stack);
+          const right = evalFormula(eqParts[1], currentSheet, stack);
+          ok = String(left) === String(right);
+        } else {
+          const value = evalFormula(condition, currentSheet, stack);
+          ok = !!value;
+        }
+        return ok ? evalFormula(args[1] || '""', currentSheet, stack)
+                  : evalFormula(args[2] || '""', currentSheet, stack);
+      }
+      if (name === 'SUM') {
+        let total = 0;
+        for (const arg of args) {
+          const range = String(arg || '').trim().match(/^(?:(?:'((?:[^']|'')+)'|(.+?))!)?([A-Z]{1,3}\d+):([A-Z]{1,3}\d+)$/i);
+          if (!range) {
+            const value = Number(evalFormula(arg, currentSheet, stack));
+            if (Number.isFinite(value)) total += value;
+            continue;
+          }
+          const sheetName = (range[1] || range[2] || currentSheet).replace(/''/g, "'");
+          const a = range[3].toUpperCase(), b = range[4].toUpperCase();
+          const am = a.match(/^([A-Z]+)(\d+)$/), bm = b.match(/^([A-Z]+)(\d+)$/);
+          if (!am || !bm) continue;
+          const c1 = colNum(am[1]), c2 = colNum(bm[1]);
+          const r1 = Number(am[2]), r2 = Number(bm[2]);
+          for (let r = Math.min(r1, r2); r <= Math.max(r1, r2); r++) {
+            for (let c = Math.min(c1, c2); c <= Math.max(c1, c2); c++) {
+              let n = c, letters = '';
+              while (n > 0) { const rem = (n - 1) % 26; letters = String.fromCharCode(65 + rem) + letters; n = Math.floor((n - 1) / 26); }
+              const value = Number(readCellValue(sheetName, `${letters}${r}`, stack));
+              if (Number.isFinite(value)) total += value;
+            }
+          }
+        }
+        return total;
+      }
+    }
+
+    // Excel 合併儲存格常用「工作表!G16:I16」這種範圍公式，
+    // 實際顯示值來自範圍左上角的 G16。
+    // 若把整個範圍當成一般文字，cached value 就會變成公式本身，
+    // 導致 Excel 在「啟用編輯」前直接顯示 =准單(紅紙)...。
+    const rangeRef = expr.match(/^(?:'((?:[^']|'')+)'|(.+?))!([A-Z]{1,3}\d+):[A-Z]{1,3}\d+$/i);
+    if (rangeRef) {
+      const sheetName = (rangeRef[1] || rangeRef[2]).replace(/''/g, "'");
+      return readCellValue(sheetName, rangeRef[3].toUpperCase(), stack);
+    }
+
+    const ref = parseCellRefToken(expr);
+    if (ref) return readCellValue(ref.sheet || currentSheet, ref.ref, stack);
+
+    const num = Number(expr);
+    return Number.isFinite(num) ? num : expr;
+  }
+
+  for (const [sheetName, info] of allSheets) {
+    const sheetXml = info.xml;
+    for (const cell of Array.from(sheetXml.getElementsByTagNameNS(NS, 'c'))) {
+      const f = cell.getElementsByTagNameNS(NS, 'f')[0];
+      if (!f || f.textContent == null) continue;
+      const ref = cell.getAttribute('r');
+      const value = readCellValue(sheetName, ref, new Set());
+
+      for (const v of Array.from(cell.getElementsByTagNameNS(NS, 'v'))) cell.removeChild(v);
+      cell.removeAttribute('t');
+      const v = sheetXml.createElementNS(NS, 'v');
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        v.textContent = String(value);
+      } else {
+        cell.setAttribute('t', 'str');
+        v.textContent = String(value ?? '');
+      }
+      cell.appendChild(v);
+    }
+    zip.file(info.target, serializer.serializeToString(sheetXml));
+  }
+
+  const ctFile = zip.file('[Content_Types].xml');
+  if (ctFile) {
+    const ctXml = parser.parseFromString(await ctFile.async('text'),'application/xml');
+    for (const ov of Array.from(ctXml.getElementsByTagName('Override'))) {
+      if (ov.getAttribute('PartName') === '/xl/calcChain.xml') ov.parentNode.removeChild(ov);
+    }
+    zip.file('[Content_Types].xml', serializer.serializeToString(ctXml));
+  }
+  if (ctXmlTransport) {
+    // 避免重複的 calcChain Override；新增的 worksheet Override 已在上方加入。
+    for (const ov of Array.from(ctXmlTransport.getElementsByTagName('Override'))) {
+      if (ov.getAttribute('PartName') === '/xl/calcChain.xml') ov.parentNode.removeChild(ov);
+    }
+    zip.file('[Content_Types].xml', serializer.serializeToString(ctXmlTransport));
+  }
+
+  return await zip.generateAsync({type:'arraybuffer',compression:'DEFLATE'});
+}
+
+function backToEdit() {
+  // 回到輸入區，但保留已選船舶、日期、卸存地與已匯入的原始 Excel，方便直接修改後重新產生。
+  document.getElementById('preview-section').classList.remove('show');
+  document.querySelectorAll('.step-section').forEach(el => el.style.display = '');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function exportManifest() {
+  const btnEl = document.querySelector('.btn-export');
+  const originalText = btnEl.textContent;
+  btnEl.textContent = '匯出中…請稍候';
+  btnEl.disabled = true;
+  try {
+    const meta = window._manifestMeta;
+    const loc = currentLocationTab;
+    const outBuf = await buildManifestXlsx(loc);
+    const filename = `${meta.ship.ship_name}_${meta.registration}_${loc}_艙單.xlsx`;
+    const blob = new Blob([outBuf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download=filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  } catch(err) {
+    alert('匯出失敗：' + err.message);
+    console.error(err);
+  } finally {
+    btnEl.textContent = originalText;
+    btnEl.disabled = false;
+  }
+}
+
+
+init();
+</script>
+</body>
+</html>

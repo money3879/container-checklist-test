@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-TW" style="background:#ffffff;color-scheme:light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>艙單系統</title>
+<style>
+:root {
+  --cyan:  #1a7bbf;
+  --amber: #c07000;
+  --red:   #cc2222;
+  --txt:   #111111;
+  --txt2:  #444444;
+}
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent }
+html, body { overflow-x:hidden; font-size:16px }
+body {
+  background:#ffffff !important; color:#111111 !important;
+  font-family:-apple-system,'PingFang TC','Microsoft JhengHei',sans-serif;
+  color-scheme:light;
+}
+
+#top {
+  position:sticky; top:0; z-index:200;
+  background:#f2f4f6; border-bottom:2px solid var(--cyan);
+  padding:10px 14px;
+}
+.bar1 { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap }
+.app-title { font-size:.95rem; font-weight:900; letter-spacing:2px; color:#1a5a8a }
+.top-btns { display:flex; gap:8px }
+.tbtn {
+  border:1px solid rgba(0,0,0,.2); border-radius:6px; padding:7px 12px;
+  font-size:.78rem; font-weight:700; cursor:pointer; font-family:inherit;
+  background:#ffffff; color:#333333; white-space:nowrap;
+}
+.tbtn-primary { border-color:var(--cyan); color:var(--cyan); background:rgba(26,123,191,.06) }
+
+main { padding:20px 16px }
+
+.section-title {
+  font-size:.8rem; font-weight:700; color:var(--txt2);
+  letter-spacing:1.5px; margin-bottom:12px;
+}
+
+.action-grid {
+  display:grid; grid-template-columns:1fr; gap:12px;
+}
+@media (min-width:480px) {
+  .action-grid { grid-template-columns:1fr 1fr; }
+}
+
+.action-card {
+  background:#ffffff; border:1px solid rgba(0,0,0,.12); border-radius:14px;
+  padding:20px 18px; cursor:pointer;
+  transition:box-shadow .15s, transform .1s;
+  display:flex; flex-direction:column; gap:8px;
+}
+.action-card:active { box-shadow:0 4px 16px rgba(0,0,0,.10); transform:scale(0.98) }
+.action-icon { font-size:2rem }
+.action-name { font-size:1rem; font-weight:800; color:var(--txt) }
+.action-desc { font-size:.78rem; color:var(--txt2); line-height:1.5 }
+
+.action-card.disabled { opacity:.45; cursor:default }
+.action-card.disabled:active { transform:none; box-shadow:none }
+.coming-soon {
+  display:inline-block; font-size:.65rem; font-weight:700;
+  background:#f0f0f0; color:#888888;
+  padding:2px 8px; border-radius:10px; align-self:flex-start;
+}
+</style>
+</head>
+<body>
+
+<div id="top">
+  <div class="bar1">
+    <span class="app-title">📜 艙單系統</span>
+    <div class="top-btns">
+      <button class="tbtn tbtn-primary" onclick="location.href='ship-data.html'">🚢 船舶資料</button>
+      <button class="tbtn tbtn-primary" onclick="location.href='consignees.html'">👥 收貨人管理</button>
+      <button class="tbtn" onclick="location.href='console.html'">🏠 回到首頁</button>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div class="section-title">功能項目</div>
+  <div class="action-grid">
+
+    <div class="action-card" onclick="location.href='manifest-import.html'">
+      <div class="action-icon">📥</div>
+      <div class="action-name">匯入並產生艙單</div>
+      <div class="action-desc">上傳原始 Excel，自動比對收貨人與艙號，預覽後匯出中華民國海關艙單</div>
+    </div>
+
+    <div class="action-card disabled" aria-disabled="true">
+      <div class="action-icon">🚧</div>
+      <div class="action-name">敬請期待</div>
+      <div class="action-desc">更多功能正在規劃與開發中，敬請期待</div>
+      <span class="coming-soon">敬請期待</span>
+    </div>
+
+  </div>
+</main>
+
+<script>
+// 登入保護
+(function checkAuth() {
+  const saved = localStorage.getItem('ctr-auth') || sessionStorage.getItem('ctr-auth');
+  if (!saved) { window.location.replace('index.html'); return; }
+  try {
+    const auth = JSON.parse(saved);
+    if (!auth || !auth.username) throw new Error('invalid');
+  } catch(e) {
+    window.location.replace('index.html');
+  }
+})();
+</script>
+</body>
+</html>

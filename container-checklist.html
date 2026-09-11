@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="zh-TW" style="background:#ffffff;color-scheme:light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>貨櫃對單系統</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* ════════ TOKENS ════════ */
+:root {
+  --bg:      #ffffff;
+  --bg2:     #f2f4f6;
+  --bg3:     #e8ecf0;
+  --line:    rgba(0,0,0,.12);
+  --cyan:    #1a7bbf;
+  --amber:   #c07000;
+  --red:     #cc2222;
+  --blue:    #2255aa;
+  --txt:     #111111;       /* 主文字 */
+  --txt2:    #444444;       /* 次要文字 */
+  --mono: 'SF Mono','Menlo','Consolas','Courier New',monospace;
+}
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent }
+html, body { overflow-x:hidden; font-size:16px }
+body { background:#ffffff !important; color:#111111 !important; font-family:-apple-system,'PingFang TC','Microsoft JhengHei',sans-serif; color-scheme:light }
+
+/* ════════ STICKY TOP ════════ */
+#top { position:sticky; top:0; z-index:200; background:#f2f4f6; border-bottom:2px solid #1a7bbf }
+
+.bar { display:flex; align-items:center; padding:8px 12px; gap:8px; border-bottom:1px solid rgba(0,0,0,.10) }
+.bar:last-child { border-bottom:none }
+
+.app-title { font-size:.95rem; font-weight:900; letter-spacing:3px; color:#1a5a8a; flex:1 }
+.tbtn { border:1px solid rgba(0,0,0,.2); border-radius:6px; padding:8px 13px; font-size:.84rem; font-weight:700;
+        cursor:pointer; font-family:inherit; background:#ffffff; color:#333333; white-space:nowrap }
+.tbtn-import { border-color:#c07000; color:#c07000; background:rgba(240,160,48,.08) }
+
+
+.bar-voyage { font-size:.82rem; color:#333333; font-weight:700; letter-spacing:.5px;
+              padding:4px 12px 5px; min-height:22px; border-bottom:1px solid rgba(0,0,0,.10) }
+
+.bar-stats { display:flex; align-items:center; gap:8px; padding:5px 12px 6px; border-bottom:1px solid rgba(0,0,0,.10) }
+.stat { font-size:.8rem; color:#555555 }
+.stat b { color:#111111; font-size:1.05rem; font-weight:800; margin-right:1px }
+.stat-done b { color:#1a7bbf }
+.prog-wrap { width:56px; flex:0 0 auto; height:4px; background:rgba(0,0,0,.12); border-radius:2px; overflow:hidden }
+.prog-bar   { height:100%; background:#1a7bbf; border-radius:2px; transition:width .3s }
+.pct { font-size:.68rem; color:#555555; font-weight:700; min-width:28px; text-align:right }
+
+.search-row { flex:1; position:relative }
+.search-row input { width:100%; background:#ffffff; border:1px solid rgba(0,0,0,.12); border-radius:6px;
+                    color:#111111; font-family:inherit; font-size:.95rem;
+                    padding:7px 28px 7px 28px; outline:none }
+.search-row input::placeholder { color:#aaaaaa }
+.search-row input:focus { border-color:#1a7bbf }
+.si { position:absolute; left:8px; top:50%; transform:translateY(-50%); color:#888888; font-size:.82rem; pointer-events:none }
+.sc { position:absolute; right:7px; top:50%; transform:translateY(-50%); background:none; border:none;
+      color:#888888; cursor:pointer; font-size:.82rem; display:none }
+.search-row input:not(:placeholder-shown) ~ .sc { display:block }
+.undo-btn { border:1px solid rgba(0,0,0,.2); border-radius:6px; padding:8px 11px; font-size:.84rem;
+            font-weight:700; cursor:pointer; font-family:inherit; background:#ffffff; color:#333333; white-space:nowrap }
+
+.filter-bar { display:flex; padding:0 12px; background:#ffffff; border-bottom:1px solid rgba(0,0,0,.10) }
+.ftab { padding:7px 16px; font-size:.82rem; font-weight:700; color:#555555; cursor:pointer;
+        border-bottom:2px solid transparent; white-space:nowrap; transition:all .15s; margin-bottom:-2px }
+.ftab.active { color:#1a7bbf; border-bottom-color:#1a7bbf }
+
+/* ════════ TABLE ════════ */
+.table-wrap { width:100%; overflow-x:hidden; background:#ffffff }
+
+table { width:100%; border-collapse:collapse; table-layout:fixed }
+
+/* col widths — 6 cols: 艙號 | 國際櫃號 | 海關封條 | 大陸封條 | 卸存地 | 尺寸 */
+col.c-cno  { width:30% }
+col.c-esn  { width:30% }
+col.c-seal { width:15% }
+.td-seal { padding:4px 3px !important }
+col.c-loc  { width:15% }
+col.c-size { width:44px }
+
+thead th {
+  background:#e8ecf0;
+  color:#222222; font-size:.75rem; font-weight:800; letter-spacing:1px;
+  padding:6px 5px; text-align:left;
+  border-bottom:2px solid #1a7bbf;
+  border-right:1px solid rgba(0,0,0,.10);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+thead th:first-child { padding-left:10px }
+thead th:last-child  { border-right:none; text-align:center }
+
+/* group banding — alternating by loc group */
+/* no group color banding */
+tbody tr { background:#ffffff }
+tbody tr:active { background:rgba(26,123,191,.12) }
+
+/* done 不用 opacity，改用個別文字色控制 */
+tbody tr.done td { text-decoration:line-through; text-decoration-color:#cc2222; text-decoration-thickness:2px }
+
+tbody tr.hl { outline:2px solid #1a7bbf; outline-offset:-2px; background:#e8f4fc }
+
+td {
+  padding:8px 6px; vertical-align:top;
+  background:#ffffff;
+  border-bottom:1px solid rgba(0,0,0,.10);
+  border-right:1px solid rgba(0,0,0,.10);
+  color:#111111; font-size:.78rem;
+}
+td:first-child { padding-left:10px }
+td:last-child  { border-right:none; text-align:center }
+
+/* ── cell content ── */
+.c-seq-val  { font-family:var(--mono); font-size:.78rem; color:#333333; display:block;
+              white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.c-cno-val  { font-family:var(--mono); font-weight:800; font-size:1.05rem; color:#cc2222;
+              display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.c-cno-dup  { color:#e00000 !important; font-weight:900 }  /* 後四碼文字色，格子背景另外處理 */   /* 後四碼重複 */
+.c-esn1     { font-family:var(--mono); font-size:1.05rem; color:#111111; display:block; line-height:1.5 }
+.c-esn2     { font-family:var(--mono); font-size:1.0rem; color:#333333; display:block; line-height:1.5; margin-top:1px }
+.c-seal-val { font-family:var(--mono); font-size:.88rem; color:#111111;
+              white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block }
+.c-loc-val  { font-family:var(--mono); font-size:.65rem; color:#333333; display:block }
+.c-loc-rep  { font-family:var(--mono); font-size:.65rem; color:rgba(0,0,0,.15); display:block }  /* 合併格效果：重複 loc 淡顯 */
+.td-dup-cno  { background:#fff176 !important }
+tr.row-marked .c-cno-val { font-weight:900 }
+.td-marked   { background:#cce8ff !important }
+.sizetag    { display:inline-block; background:#dde8f0; color:#1a5080;
+              font-size:.48rem; font-weight:700; padding:1px 4px; border-radius:3px }
+
+/* done 覆蓋 */
+/* 已對：次要欄位變灰 */
+tbody tr.done .c-seq-val,
+tbody tr.done .c-loc-val  { color:#aaaaaa !important }
+/* 已對：主要欄位維持深色，劃線仍清楚可見 */
+tbody tr.done .c-cno-val  { color:#cc2222 !important }
+tbody tr.done .c-esn1     { color:#111111 !important }
+tbody tr.done .c-esn2     { color:#333333 !important }
+tbody tr.done .c-seal-val { color:#111111 !important }
+
+/* ════════ EMPTY ════════ */
+.empty { text-align:center; padding:50px 20px; color:#777777; font-size:.85rem; line-height:2.2 }
+.empty .ico { font-size:2.2rem; margin-bottom:8px }
+
+/* ════════ MANUAL PANEL ════════ */
+.manual-panel { background:#f2f4f6; border-top:2px solid rgba(0,0,0,.12); padding:10px 12px }
+.manual-panel h3 { font-size:.65rem; color:#555555; letter-spacing:2px; margin-bottom:7px; font-weight:700 }
+.mrow { display:flex; gap:5px; flex-wrap:wrap }
+.mrow input, .mrow select {
+  flex:1 1 90px; background:#ffffff; border:1px solid rgba(0,0,0,.12);
+  border-radius:5px; color:#111111; padding:8px 8px; font-size:.88rem;
+  font-family:inherit; outline:none; min-width:0
+}
+.mrow input:focus, .mrow select:focus { border-color:#1a7bbf }
+.mrow input::placeholder { color:#aaaaaa }
+.madd { padding:9px 14px; background:#ddeeff; border:1px solid #1a7bbf;
+        color:#1a5a8a; border-radius:5px; font-size:.75rem; font-weight:700;
+        cursor:pointer; font-family:inherit; white-space:nowrap }
+
+/* ════════ DIALOGS ════════ */
+/* shared overlay style */
+.dlg-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.45);
+  display:none; align-items:center; justify-content:center; padding:20px;
+}
+.dlg-overlay.show { display:flex }
+.dlg-box {
+  background:#ffffff; border:1px solid rgba(0,0,0,.15); border-radius:12px;
+  padding:22px 20px 18px; max-width:300px; width:100%; text-align:center;
+  box-shadow:0 8px 32px rgba(0,0,0,.18)
+}
+.dlg-box h3 { font-size:1.1rem; font-weight:800; color:#111111; margin-bottom:6px }
+.dlg-box .dlg-seq { font-size:.75rem; color:#888888; margin-bottom:12px; font-weight:600 }
+.dlg-box p  { font-size:.88rem; color:#444444; line-height:1.6; margin-bottom:16px }
+.dlg-btns { display:flex; gap:8px; justify-content:center }
+.dlg-cancel { flex:1; padding:10px; background:none; border:1px solid rgba(0,0,0,.2); color:#555555;
+               border-radius:8px; font-size:.92rem; cursor:pointer; font-family:inherit }
+.dlg-ok     { flex:1; padding:10px; background:#cc2222; color:#fff; border:none;
+               border-radius:8px; font-size:.92rem; font-weight:800; cursor:pointer; font-family:inherit; text-align:center; display:flex; align-items:center; justify-content:center }
+#dlg-mark-ok { display:none; background:#1976d2 }
+.dlg-ok.blue { background:#2255aa }
+.dlg-ok.green{ background:#27ae60 }
+
+/* reset dialog — z-index 400 */
+#dlg-reset   { z-index:400 }
+/* toggle dialog — z-index 500, always on top; vertical position set dynamically by JS */
+#dlg-toggle  { z-index:500; align-items:flex-start }
+
+/* ════════ IMPORT OVERLAY ════════ */
+.import-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.82);
+  z-index:300; display:none; align-items:flex-end; justify-content:center
+}
+.import-overlay.show { display:flex }
+.ipanel {
+  background:#ffffff; border-radius:16px 16px 0 0; border-top:1px solid rgba(0,0,0,.10);
+  padding:18px 16px 34px; width:100%; max-width:600px; max-height:85vh; overflow-y:auto
+}
+.ipanel h2 { font-size:.88rem; font-weight:800; color:#c07000; letter-spacing:2px; margin-bottom:5px }
+.ipanel p  { font-size:.72rem; color:#444444; margin-bottom:12px; line-height:1.6 }
+.dzone {
+  border:2px dashed rgba(0,0,0,.12); border-radius:8px; padding:26px 16px;
+  text-align:center; cursor:pointer; transition:all .2s; margin-bottom:10px
+}
+.dzone:hover, .dzone.drag-over { border-color:#c07000; background:rgba(240,160,48,.06) }
+.dzone .di { font-size:1.8rem; margin-bottom:6px }
+.dzone p   { font-size:.75rem; color:#555555; margin:0 }
+.dzone strong { color:#c07000 }
+.cmap-table { width:100%; border-collapse:collapse; margin-bottom:10px }
+.cmap-table th { font-size:.63rem; color:#555555; letter-spacing:1px; padding:5px 6px;
+                 text-align:left; border-bottom:1px solid rgba(0,0,0,.10) }
+.cmap-table td { padding:4px 6px; font-size:.76rem; color:#111111 }
+.cmap-table select { background:#ffffff; border:1px solid rgba(0,0,0,.2); color:#111111;
+                     border-radius:4px; padding:3px 6px; font-size:.72rem; font-family:inherit; width:100% }
+.iactions { display:flex; gap:8px }
+.i-ok  { flex:1; padding:11px; background:#1a7bbf; color:#ffffff; border:none;
+          border-radius:7px; font-size:.82rem; font-weight:800; cursor:pointer; font-family:inherit }
+.i-can { padding:11px 16px; background:none; border:1px solid rgba(0,0,0,.2); color:#555555;
+          border-radius:7px; font-size:.82rem; cursor:pointer; font-family:inherit }
+
+/* ════════ TOAST ════════ */
+.toast {
+  position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(8px);
+  background:#1a7bbf; border:1px solid #1a7bbf; color:#ffffff;
+  padding:8px 18px; border-radius:20px; font-size:.76rem; font-weight:700;
+  opacity:0; transition:all .25s; pointer-events:none; z-index:600; white-space:nowrap
+}
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0) }
+.toast.warn { background:#c07000; border-color:#c07000; color:#ffffff }
+
+mark { background:#ffe066; color:#7a4400; border-radius:2px }
+input[type="file"] { display:none }
+</style>
+</head>
+<body>
+
+<!-- ════ STICKY TOP ════ -->
+<div id="top">
+  <!-- row 1: title + buttons -->
+  <div class="bar">
+    <span class="app-title">對單系統</span>
+    <button class="tbtn tbtn-import" onclick="openImport()">📥 匯入</button>
+    <button class="tbtn" onclick="location.href='container-history.html'" style="color:#6a4fb0;border-color:rgba(106,79,176,.3)">📋 歷史</button>
+    <button class="tbtn" onclick="location.href='console.html'" style="color:#555555;border-color:rgba(0,0,0,.2)">🏠 回到首頁</button>
+  </div>
+
+  <!-- row 2: voyage -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 12px 5px;border-bottom:1px solid rgba(0,0,0,.10)">
+    <span class="bar-voyage" id="bar-voyage" style="margin:0;padding:0;border:none;min-height:auto">尚未匯入航次資訊</span>
+    <span id="sync-status" style="font-size:.68rem;font-weight:600;white-space:nowrap"></span>
+  </div>
+
+  <!-- row 3: stats -->
+  <div class="bar-stats">
+    <div class="stat stat-done"><b id="s-done">0</b> 已對</div>
+    <div class="stat"><b id="s-total">0</b> 總計</div>
+    <div class="prog-wrap"><div class="prog-bar" id="prog-bar" style="width:0%"></div></div>
+    <div class="pct" id="pct">0%</div>
+    <div id="sync-status2" style="margin-left:auto;font-size:.72rem;font-weight:700;color:#999999;white-space:nowrap">尚未同步</div>
+  </div>
+
+  <!-- row 4: search -->
+  <div class="bar">
+    <div class="search-row">
+      <span class="si">🔍</span>
+      <input type="text" id="q" placeholder="搜尋 櫃號 / 海關封條 / 大陸封條 / 卸存地…"
+        oninput="onSearch()" autocomplete="off" autocorrect="off" spellcheck="false">
+      <button class="sc" onclick="handleX()">✕</button>
+    </div>
+    <button class="undo-btn" onclick="clearQ()">✕ 清除</button>
+  </div>
+
+  <!-- row 5: filter tabs -->
+  <div class="filter-bar">
+    <div class="ftab active" onclick="setFilter('all',this)">全部</div>
+    <div class="ftab" onclick="setFilter('pending',this)">未對 ○</div>
+    <div class="ftab" onclick="setFilter('done',this)">已對 ✓</div>
+  </div>
+</div>
+
+<!-- ════ LEGEND ════ -->
+<div id="legend-bar" style="display:flex;align-items:center;gap:12px;padding:6px 12px 7px;background:#f8f9fa;border-bottom:1px solid rgba(0,0,0,.10);font-size:.8rem;color:#444;flex-wrap:wrap">
+  <span style="display:flex;align-items:center;gap:4px">
+    <span style="display:inline-block;width:14px;height:14px;background:#fff176;border:1px solid #ccc;border-radius:2px"></span>後四碼重複
+  </span>
+  <span style="display:flex;align-items:center;gap:4px">
+    <span style="display:inline-block;width:14px;height:14px;background:#bbdefb;border:1px solid #ccc;border-radius:2px"></span>已標記櫃號
+  </span>
+</div>
+
+<!-- ════ TABLE ════ -->
+<div class="table-wrap">
+  <table>
+    <colgroup>
+      <col class="c-cno"><col class="c-esn">
+      <col class="c-seal"><col class="c-loc"><col class="c-size">
+    </colgroup>
+    <thead>
+      <tr>
+        <th>國際櫃號</th>
+        <th>海關封條</th>
+        <th>大陸封條</th>
+        <th>卸存地</th>
+        <th>尺寸</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div id="empty" class="empty" style="display:none">
+    <div class="ico">🚢</div>
+    尚未有資料<br>
+    <span style="font-size:.72rem">請匯入 Excel 或手動新增</span>
+  </div>
+</div>
+
+<!-- ════ MANUAL ENTRY ════ -->
+<div class="manual-panel">
+  <h3>手動新增</h3>
+  <div class="mrow">
+    <input id="m-seq"  type="text" placeholder="艙號"      style="flex:0 0 60px">
+    <input id="m-cno"  type="text" placeholder="國際櫃號 *" style="flex:2 1 110px" autocapitalize="characters">
+    <input id="m-esn"  type="text" placeholder="海關封條">
+    <input id="m-seal" type="text" placeholder="大陸封條">
+    <input id="m-loc"  type="text" placeholder="卸存地">
+    <select id="m-size" style="flex:0 0 68px">
+      <option value="">尺寸</option>
+      <option>40HQ</option><option>40GP</option><option>20GP</option><option>45HQ</option>
+    </select>
+    <button class="madd" onclick="manualAdd()">＋ 新增</button>
+  </div>
+</div>
+
+<!-- ════ RESET DIALOG ════ -->
+<div class="dlg-overlay" id="dlg-reset">
+  <div class="dlg-box">
+    <h3>↺ 重置對單狀態</h3>
+    <p>確定要清除所有已劃線的記號嗎？<br>資料不會刪除。</p>
+    <div class="dlg-btns">
+      <button class="dlg-cancel" onclick="closeReset()">取消</button>
+      <button class="dlg-ok" onclick="doReset()">確定重置</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ TOGGLE DIALOG ════ -->
+<div class="dlg-overlay" id="dlg-toggle">
+  <div class="dlg-box">
+    <h3 id="dlg-toggle-msg">確認操作？</h3>
+    <div class="dlg-seq" id="dlg-seq"></div>
+    <div class="dlg-btns" style="margin-top:4px">
+      <button class="dlg-cancel" onclick="closeToggle()">取消</button>
+      <button class="dlg-ok" id="dlg-mark-ok" onclick="doMark()">標記櫃號</button>
+      <button class="dlg-ok green" id="dlg-toggle-ok" onclick="doToggle()">確認劃線</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ IMPORT OVERLAY ════ -->
+<div class="import-overlay" id="import-overlay" onclick="importOutside(event)">
+  <div class="ipanel">
+    <h2>📥 匯入 Excel / CSV</h2>
+    <p>支援 .xlsx、.xls、.csv<br>若第一行含「航次 / 船掛 / BR / 進口」會自動讀入航次資訊。</p>
+    <div class="dzone" id="dzone"
+      onclick="document.getElementById('fi').click()"
+      ondragover="dOver(event)" ondragleave="dLeave()" ondrop="dDrop(event)">
+      <div class="di">📂</div>
+      <p>點此選檔案<br><strong>或拖曳 Excel 到此</strong></p>
+    </div>
+    <input type="file" id="fi" accept=".xlsx,.xls,.csv" onchange="fileSel(this)">
+    <div id="cmap-wrap" style="display:none">
+      <p style="color:#1a7bbf;font-size:.74rem;margin-bottom:7px">✅ 讀取成功，請確認欄位對應：</p>
+      <table class="cmap-table">
+        <thead><tr><th>系統欄位</th><th>Excel 欄位</th></tr></thead>
+        <tbody id="cmap-body"></tbody>
+      </table>
+    </div>
+    <div class="iactions">
+      <button class="i-can" onclick="closeImport()">取消</button>
+      <button class="i-ok" id="i-ok" onclick="doImport()" disabled>確認匯入</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ══════════════════════════════
+   登入保護：未登入導回 index.html
+══════════════════════════════ */
+let _authOk = true;
+(function checkAuth() {
+  const saved = localStorage.getItem('ctr-auth') || sessionStorage.getItem('ctr-auth');
+  if (!saved) {
+    _authOk = false;
+    window.location.replace('index.html');
+    return;
+  }
+  try {
+    const auth = JSON.parse(saved);
+    if (!auth || !auth.username) throw new Error('invalid');
+    window._currentUser = auth.username;
+  } catch(e) {
+    _authOk = false;
+    localStorage.removeItem('ctr-auth');
+    sessionStorage.removeItem('ctr-auth');
+    window.location.replace('index.html');
+  }
+})();
+
+/* ══════════════════════════════
+   SUPABASE CONFIG（供修改密碼使用）
+══════════════════════════════ */
+const SB_URL = 'https://ruziacdggdfyvlbcjnan.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1emlhY2RnZ2RmeXZsYmNqbmFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NzE1OTEsImV4cCI6MjEwMDQ0NzU5MX0.3P7SzY2EfKtUTcuaBB0fMY0FOIdp_X3KmkfRnL8wuSg';
+
+/* ══════════════════════════════
+   STATE
+══════════════════════════════ */
+let rows = [], filt = 'all', qStr = '', lastCh = null, xlsH = [], xlsD = [];
+let pendingId = null;   // for toggle dialog
+
+// 每個裝置/瀏覽器獨立的識別碼，用來分辨「是不是這台裝置自己剛做的操作」
+// 即使多個裝置登入同一個帳號，也能正確分辨來源
+let deviceId = localStorage.getItem('ctr4-device-id');
+if (!deviceId) {
+  deviceId = 'dev-' + Math.random().toString(36).slice(2, 10);
+  localStorage.setItem('ctr4-device-id', deviceId);
+}
+
+const SAMPLE = [
+  {seq:'7101~7112',cno:'XSFU6800755',esn:'ESN5003873',esn2:'PS23015266',seal:'135018',loc:'003C2002',size:'40HQ'},
+  {seq:'JW01~JW07',cno:'XSFU6800101',esn:'ESN5003874',esn2:'PS23015267',seal:'200362',loc:'003C2031',size:'40HQ'},
+  {seq:'PP01~PP07',cno:'XSFU6800992',esn:'ESN5003875',esn2:'PS23015268',seal:'200334',loc:'003C2031',size:'40HQ'},
+  {seq:'PP08~PP16',cno:'XSFU6801767',esn:'ESN5003876',esn2:'PS23015269',seal:'200335',loc:'003C2031',size:'40HQ'},
+  {seq:'PP17~PP21',cno:'XSFU6800903',esn:'ESN5003877',esn2:'PS23015270',seal:'200336',loc:'003C2031',size:'40HQ'},
+  {seq:'PP22~PP26',cno:'XSFU6800570',esn:'ESN5003878',esn2:'PS23015271',seal:'200337',loc:'003C2031',size:'40HQ'},
+  {seq:'PP27~PP33',cno:'XSFU6600119',esn:'ESN5003879',esn2:'PS23015272',seal:'200351',loc:'003C2031',size:'40HQ'},
+  {seq:'LS01~LS02',cno:'XSFU3333338',esn:'ESN5003911',esn2:'PS23015273',seal:'200369',loc:'003C2014',size:''},
+  {seq:'0010',     cno:'XSFU6601455',esn:'ESN5003880',esn2:'',          seal:'000365',loc:'017A1130',size:'40HQ'},
+  {seq:'0020',     cno:'XSFU6600417',esn:'ESN5003881',esn2:'',          seal:'000293',loc:'017A1130',size:'40HQ'},
+  {seq:'0040',     cno:'XSFU6800272',esn:'ESN5003882',esn2:'',          seal:'000286',loc:'017A1130',size:'40HQ'},
+  {seq:'5710',     cno:'XSFU6800333',esn:'ESN5003883',esn2:'',          seal:'200364',loc:'KHH0638S',size:'40HQ'},
+  {seq:'1001',     cno:'HRSU4601700',esn:'ESN5003884',esn2:'',          seal:'200343',loc:'TPEE011S', size:'40HQ'},
+  {seq:'1002',     cno:'MATU2538177',esn:'ESN5003885',esn2:'',          seal:'200352',loc:'TPEE011S', size:'40HQ'},
+  {seq:'1003',     cno:'ZGXU6193225',esn:'ESN5003886',esn2:'',          seal:'200367',loc:'TPEE011S', size:'40HQ'},
+  {seq:'1004',     cno:'XSFU6800246',esn:'ESN5003887',esn2:'',          seal:'200354',loc:'TPEE011S', size:'40HQ'},
+  {seq:'1005',     cno:'XSFU6900543',esn:'ESN5003888',esn2:'',          seal:'200363',loc:'TPEE011S', size:'40HQ'},
+  {seq:'1101',     cno:'XSFU6800858',esn:'ESN5003889',esn2:'',          seal:'200355',loc:'TPEE011S', size:'40HQ'},
+  {seq:'1201',     cno:'XSFU6800436',esn:'ESN5003890',esn2:'',          seal:'200342',loc:'TPEE011S', size:'40HQ'},
+  {seq:'1301',     cno:'XSFU6801073',esn:'ESN5003891',esn2:'',          seal:'200341',loc:'TPEE011S', size:'40HQ'},
+  {seq:'1302',     cno:'RFCU4008176',esn:'ESN5003892',esn2:'',          seal:'200344',loc:'TPEE011S', size:'40HQ'},
+  {seq:'1511',     cno:'ZGXU6216526',esn:'ESN5003893',esn2:'',          seal:'200340',loc:'TPEE011S', size:'40HQ'},
+];
+
+/* ══════════════════════════════
+   INIT
+══════════════════════════════ */
+window.addEventListener('DOMContentLoaded', () => {
+  if (!_authOk) return;
+  try {
+    const s = localStorage.getItem('ctr4-rows');
+    rows = s ? JSON.parse(s).map(r=>({marked:false,...r})) : [];
+  } catch { rows = []; }
+  const v = localStorage.getItem('ctr4-voyage');
+  if (v) document.getElementById('bar-voyage').textContent = v;
+  render();
+
+  // 開啟頁面時，檢查雲端是否已有今天的資料（若有，優先套用雲端版本）
+  sbLoadToday();
+
+  // 每 10 秒自動檢查一次雲端是否有新的劃線/標記狀態
+  setInterval(sbPollUpdates, 10000);
+
+  // 從其他頁面切回來時（例如歷史紀錄頁），立刻檢查一次，不用等 10 秒
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      sbPollUpdates();
+    }
+  });
+});
+
+/* ══════════════════════════════
+   雲端同步：完整資料上傳/下載
+══════════════════════════════ */
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+let sbSessionId = null;   // 今天這筆 session 的 id
+
+// 開啟頁面時：檢查今天是否已有人上傳過資料
+async function sbCheckToday() {
+  try {
+    const today = todayStr();
+    const res = await fetch(
+      `${SB_URL}/rest/v1/sessions?date=eq.${today}&order=updated_at.desc&limit=1`,
+      { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && data.length > 0) {
+      return data[0];
+    }
+    return null;
+  } catch(e) {
+    return null;
+  }
+}
+
+// 從雲端載入今天的完整資料（艙號、封條...等全部欄位）
+async function sbLoadToday() {
+  const session = await sbCheckToday();
+  if (session && session.rows && session.rows.length > 0) {
+    sbSessionId = session.id;
+    rows = session.rows;
+    save();
+    if (session.voyage) {
+      document.getElementById('bar-voyage').textContent = session.voyage;
+      localStorage.setItem('ctr4-voyage', session.voyage);
+    }
+    render();
+    toast('☁️ 已載入今日雲端資料');
+    return true;
+  }
+
+  // 雲端沒有今天的資料 → 清空本機殘留資料（避免顯示已被刪除或過期的舊資料）
+  sbSessionId = null;
+  rows = [];
+  save();
+  localStorage.removeItem('ctr4-voyage');
+  document.getElementById('bar-voyage').textContent = '尚未匯入航次資訊';
+  render();
+  return false;
+}
+
+// 匯入 Excel 後：把完整資料上傳到雲端（新建或覆蓋今天的 session）
+async function sbUploadFull() {
+  try {
+    const today = todayStr();
+    const voyage = document.getElementById('bar-voyage').textContent;
+    const username = window._currentUser || '';
+    const updatedByField = `${username}|已匯入資料|${deviceId}`;
+
+    if (sbSessionId) {
+      // 已有今天的 session，直接覆蓋更新
+      await fetch(`${SB_URL}/rest/v1/sessions?id=eq.${sbSessionId}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY,
+          'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({
+          rows, voyage, updated_by: updatedByField,
+          updated_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 48*3600*1000).toISOString()
+        })
+      });
+    } else {
+      // 建立新的 session（只有這裡會寫入 created_by，之後更新不會改變它）
+      const res = await fetch(`${SB_URL}/rest/v1/sessions`, {
+        method: 'POST',
+        headers: {
+          'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY,
+          'Content-Type': 'application/json', 'Prefer': 'return=representation'
+        },
+        body: JSON.stringify({ date: today, voyage, rows, updated_by: updatedByField, created_by: updatedByField })
+      });
+      const data = await res.json();
+      if (data && data[0]) sbSessionId = data[0].id;
+    }
+    showSyncStatus('☁️ 已同步至雲端');
+  } catch(e) {
+    showSyncStatus('⚠️ 雲端同步失敗', true);
+  }
+}
+
+// 每次劃線/標記，立即各自觸發一次同步（不排隊、不互相等待，確保每個動作都送出）
+async function sbDebouncedUpdate(actionLabel) {
+  actionLabel = actionLabel || '已更新';
+  showSyncStatus(`☁️ ${actionLabel}，同步中…`);
+
+  if (!sbSessionId) {
+    showSyncStatus('⚠️ 尚未建立雲端紀錄，請重新匯入', true);
+    return;
+  }
+
+  try {
+    const username = window._currentUser || '';
+    // 把動作類型和裝置碼一起存進 updated_by，讓其他裝置的輪詢可以顯示「誰做了什麼」，並正確分辨來源裝置
+    const updatedByField = `${username}|${actionLabel}|${deviceId}`;
+    const snapshotRows = rows;  // 送出當下最新的完整 rows
+    const res = await fetch(`${SB_URL}/rest/v1/sessions?id=eq.${sbSessionId}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY,
+        'Content-Type': 'application/json', 'Prefer': 'return=representation'
+      },
+      body: JSON.stringify({
+        rows: snapshotRows, updated_by: updatedByField,
+        updated_at: new Date().toISOString()
+      })
+    });
+
+    if (res.ok) {
+      const updated = await res.json();
+      // PATCH 成功但沒有任何 row 被更新，代表這個 session id 已經不存在（例如被刪除過）
+      if (!updated || updated.length === 0) {
+        sbSessionId = null;
+        await sbUploadFull();  // 重新建立一筆新的 session
+        showSyncStatus('☁️ 原紀錄已被刪除，已重新建立');
+        return;
+      }
+    }
+    showSyncStatus(`☁️ ${username} ${actionLabel}`);
+  } catch(e) {
+    showSyncStatus('⚠️ 同步失敗（離線）', true);
+  }
+}
+
+// 定時輪詢：只同步 done/marked 狀態，不動使用者正在看的畫面結構
+let sbLastUpdatedAt = null;
+async function sbPollUpdates() {
+  if (!sbSessionId) return;  // 還沒有 session，不用輪詢
+  try {
+    const res = await fetch(
+      `${SB_URL}/rest/v1/sessions?id=eq.${sbSessionId}&select=rows,updated_at,updated_by`,
+      { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } }
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+
+    // 雲端這筆 session 已經被刪除（例如在歷史紀錄頁被手動刪除，不論是誰刪除的）
+    if (!data || data.length === 0) {
+      sbSessionId = null;
+      sbLastUpdatedAt = null;
+      rows = [];
+      save();
+      localStorage.removeItem('ctr4-voyage');
+      document.getElementById('bar-voyage').textContent = '尚未匯入航次資訊';
+      render();
+      showSyncStatus('⚠️ 這筆資料已被刪除，請重新匯入', true);
+      toast('⚠️ 目前資料已被刪除，畫面已清空', 'warn');
+      return;
+    }
+
+    const remote = data[0];
+    // 如果雲端時間跟上次拿到的一樣，代表沒有新變化，不用更新
+    if (sbLastUpdatedAt === remote.updated_at) return;
+    sbLastUpdatedAt = remote.updated_at;
+
+    // updated_by 欄位格式為「帳號|動作類型|裝置碼」，例如 "rui0409|已標記|dev-abc123"
+    const parts = (remote.updated_by || '').split('|');
+    const remoteUser = parts[0] || '';
+    const remoteAction = parts[1] || '已更新';
+    const remoteDeviceId = parts[2] || '';
+
+    // 避免覆蓋自己「這台裝置」剛做的操作：用裝置碼比對，即使同帳號多裝置登入也能正確分辨
+    if (remoteDeviceId === deviceId) return;
+
+    if (remote.rows && remote.rows.length > 0) {
+      // 用貨櫃號碼比對，只更新 done/marked，保留其他欄位
+      rows = rows.map(r => {
+        const match = remote.rows.find(x => x.cno === r.cno);
+        if (match) return { ...r, done: match.done, marked: match.marked };
+        return r;
+      });
+      save();
+      render();
+      showSyncStatus(`☁️ ${remoteUser || '其他人'} ${remoteAction || '已更新'}`);
+    }
+  } catch(e) {
+    // 輪詢失敗靜默處理，不打擾使用者
+  }
+}
+
+function nowHHMM() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+}
+
+function showSyncStatus(msg, warn=false) {
+  const el = document.getElementById('sync-status2');
+  if (!el) return;
+  el.textContent = `${msg}（${nowHHMM()}）`;
+  el.style.color = warn ? '#cc6600' : '#1a7bbf';
+  // 不自動清除，訊息會一直顯示，直到下一次同步狀態改變
+}
+
+function save() { localStorage.setItem('ctr4-rows', JSON.stringify(rows)); }
+
+/* ══════════════════════════════
+   RENDER
+══════════════════════════════ */
+function render() {
+  const q = qStr.trim().toUpperCase();
+  const tbody = document.getElementById('tbody');
+  document.getElementById('empty').style.display = rows.length === 0 ? 'block' : 'none';
+
+  /* filter */
+  const vis = rows.filter(r => {
+    if (filt === 'done'    && !r.done) return false;
+    if (filt === 'pending' &&  r.done) return false;
+    if (!q) return true;
+    return [r.cno, r.esn, r.esn2, r.seal, r.loc, r.seq].some(v => (v||'').toUpperCase().includes(q));
+  });
+
+  /* highlight helper */
+  function hl(t) {
+    if (!q || !t) return t || '';
+    return t.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi'), '<mark>$1</mark>');
+  }
+
+  /* ── 後四碼重複偵測 ── */
+  const tail4 = {};
+  rows.forEach(r => { const t = (r.cno||'').slice(-4); if(t) tail4[t] = (tail4[t]||0)+1; });
+
+  /* ── 艙號合併格：相同相鄰艙號只顯示一次 ── */
+  let prevSeq = ' ';
+  const isFirstSeq = {};
+  vis.forEach(r => {
+    const seqKey = (r.seq||'').trim();
+    if (seqKey && seqKey !== prevSeq) { isFirstSeq[r.id] = true; prevSeq = seqKey; }
+    else if (!seqKey) { isFirstSeq[r.id] = true; prevSeq = ' '; }
+  });
+
+  tbody.innerHTML = vis.map(r => {
+    const isDup = tail4[(r.cno||'').slice(-4)] > 1;
+    const cnoHtml = r.cno
+      ? `<span class="c-cno-val">${hl(r.cno)}</span>`
+      : '';
+    const seqCellClass  = r.marked ? 'td-marked' : '';
+    const cnoCellClass  = (r.marked ? 'td-marked ' : '') + (isDup ? 'td-dup-cno' : '');
+    return `<tr id="r${r.id}" class="${r.done?'done':''}" onclick="askToggle(${r.id})">
+      <td class="${cnoCellClass}">${cnoHtml}</td>
+      <td>${r.esn2
+        ? `<span class="c-esn1">${hl(r.esn||'—')}</span><span class="c-esn2">${hl(r.esn2)}</span>`
+        : `<span class="c-esn1">${hl(r.esn||'—')}</span>`
+      }</td>
+      <td class="td-seal"><span class="c-seal-val">${hl(r.seal||'—')}</span></td>
+      <td><span class="c-loc-val">${hl(r.loc||'—')}</span></td>
+      <td>${r.size ? `<span class="sizetag">${r.size}</span>` : ''}</td>
+    </tr>`;
+  }).join('');
+
+  /* stats */
+  const total = rows.length, done = rows.filter(r => r.done).length;
+  const pct = total ? Math.round(done/total*100) : 0;
+  document.getElementById('s-done').textContent  = done;
+  document.getElementById('s-total').textContent = total;
+  document.getElementById('prog-bar').style.width = pct + '%';
+  document.getElementById('pct').textContent = pct + '%';
+
+  /* scroll to first match */
+  if (q && vis.length) {
+    const el = document.getElementById('r' + vis[0].id);
+    if (el) { el.classList.add('hl'); setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'center'}),60); }
+  }
+}
+
+/* ══════════════════════════════
+   TOGGLE DIALOG
+   — askToggle opens dialog
+   — doToggle executes, uses local var not global
+══════════════════════════════ */
+function askToggle(id) {
+  const r = rows.find(x => x.id === id);
+  if (!r) return;
+  pendingId = id;
+  const msg = r.done ? `取消 ${r.cno} 的劃線？` : `確認 ${r.cno} 已對？`;
+  const seqEl = document.getElementById('dlg-seq');
+  seqEl.textContent = r.seq ? `艙號：${r.seq}` : '';
+  document.getElementById('dlg-toggle-msg').textContent = msg;
+  document.getElementById('dlg-seq').textContent = r.seq ? `艙號：${r.seq}` : '';
+  const okBtn = document.getElementById('dlg-toggle-ok');
+  okBtn.textContent = r.done ? '取消劃線' : '確認劃線';
+  okBtn.className = r.done ? 'dlg-ok blue' : 'dlg-ok green';
+  // 標記按鈕：任何狀態都顯示，文字依目前標記狀態切換
+  const markBtn = document.getElementById('dlg-mark-ok');
+  markBtn.style.display = 'inline-flex';
+  markBtn.style.flex = '1';
+  markBtn.textContent = r.marked ? '取消標記' : '標記櫃號';
+  markBtn.style.background = r.marked ? '#e53935' : '#1976d2';
+  document.getElementById('dlg-toggle').classList.add('show');
+
+  // 動態定位：讓對話框顯示在「表格第一列」下方，不管第一列是單行還是雙行封條都精準避開
+  positionToggleDialog();
+}
+
+function positionToggleDialog() {
+  const dlg = document.getElementById('dlg-toggle');
+  const firstRow = document.querySelector('#tbody tr');
+  if (!firstRow) {
+    dlg.style.paddingTop = '';
+    return;
+  }
+  const rect = firstRow.getBoundingClientRect();
+  // 第一列底部位置 + 一點間距，最少留 12px、最多不超過螢幕高度的 60%（避免資料很多列時對話框跑到畫面外）
+  const offset = Math.min(Math.max(rect.bottom + 10, 12), window.innerHeight * 0.6);
+  dlg.style.paddingTop = offset + 'px';
+}
+
+function closeToggle() {
+  document.getElementById('dlg-toggle').classList.remove('show');
+  // do NOT clear pendingId here — doToggle needs it
+}
+
+function doToggle() {
+  // snapshot id first, then close
+  const tid = pendingId;
+  document.getElementById('dlg-toggle').classList.remove('show');
+  pendingId = null;
+
+  const idx = rows.findIndex(x => x.id === tid);
+  if (idx < 0) return;
+  lastCh = { id: tid, prev: rows[idx].done };
+  rows[idx] = { ...rows[idx], done: !rows[idx].done };
+  const actionLabel = rows[idx].done ? '已劃線' : '已取消劃線';
+  save();
+  sbDebouncedUpdate(actionLabel);
+  render();
+  toast(rows[idx].done ? `✓ ${rows[idx].cno} 已對` : `${rows[idx].cno} 取消劃線`, rows[idx].done ? '' : 'warn');
+}
+
+/* ══════════════════════════════
+   MARK（標記櫃號）
+══════════════════════════════ */
+function doMark() {
+  const tid = pendingId;
+  document.getElementById('dlg-toggle').classList.remove('show');
+  pendingId = null;
+  const idx = rows.findIndex(x => x.id === tid);
+  if (idx < 0) return;
+  rows[idx] = { ...rows[idx], marked: !rows[idx].marked };
+  const actionLabel = rows[idx].marked ? '已標記' : '已取消標記';
+  save(); sbDebouncedUpdate(actionLabel); render();
+  toast(rows[idx].marked ? `📌 ${rows[idx].cno} 已標記` : `${rows[idx].cno} 取消標記`, rows[idx].marked ? '' : 'warn');
+}
+
+/* ══════════════════════════════
+   MARK
+══════════════════════════════ */
+/* ══════════════════════════════
+   UNDO
+══════════════════════════════ */
+function undoLast() {
+  if (!lastCh) { toast('沒有可復原的操作', 'warn'); return; }
+  const idx = rows.findIndex(x => x.id === lastCh.id);
+  if (idx >= 0) {
+    rows[idx] = { ...rows[idx], done: lastCh.prev };
+    save(); render(); toast('↩ 已復原');
+  }
+  lastCh = null;
+}
+
+/* ══════════════════════════════
+   RESET DIALOG
+══════════════════════════════ */
+function askReset()  { document.getElementById('dlg-reset').classList.add('show'); }
+function closeReset(){ document.getElementById('dlg-reset').classList.remove('show'); }
+function doReset() {
+  closeReset();
+  rows = rows.map(r => ({...r, done:false, marked:false}));
+  save(); sbDebouncedUpdate(); lastCh = null;
+  document.getElementById('tbody').innerHTML = '';
+  render();
+  toast('↺ 已重置，可重新開始對單', 'warn');
+}
+
+/* ══════════════════════════════
+   SEARCH / FILTER
+══════════════════════════════ */
+function onSearch() { qStr = document.getElementById('q').value; render(); }
+function handleX() {
+  if (document.getElementById('q').value) {
+    // 有搜尋文字 → 清除搜尋
+    document.getElementById('q').value = '';
+    qStr = '';
+    render();
+  } else {
+    // 沒有搜尋文字 → 開重置確認框
+    askReset();
+  }
+}
+function clearQ()   { document.getElementById('q').value = ''; qStr = ''; render(); }
+function scAction() {
+  const q = document.getElementById('q').value;
+  if (q) {
+    clearQ();
+  } else {
+    askReset();
+  }
+}
+function clearAndReset() {
+  clearQ();
+  // 如果有劃線或標記才詢問，否則只清搜尋
+  const hasDone   = rows.some(r => r.done);
+  const hasMarked = rows.some(r => r.marked);
+  if (hasDone || hasMarked) {
+    askReset();
+  }
+}
+function setFilter(f, el) {
+  filt = f;
+  document.querySelectorAll('.ftab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+/* ══════════════════════════════
+   MANUAL ADD
+══════════════════════════════ */
+function manualAdd() {
+  const cno = document.getElementById('m-cno').value.trim().toUpperCase();
+  if (!cno) { toast('請輸入國際櫃號', 'warn'); return; }
+  rows.unshift({
+    id: Date.now(), done: false,
+    seq:  document.getElementById('m-seq').value.trim(),
+    cno,
+    esn:  document.getElementById('m-esn').value.trim().toUpperCase(),
+    esn2: '',
+    seal: document.getElementById('m-seal').value.trim(),
+    loc:  document.getElementById('m-loc').value.trim().toUpperCase(),
+    size: document.getElementById('m-size').value,
+  });
+  save(); render();
+  ['m-seq','m-cno','m-esn','m-seal','m-loc'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('m-size').value = '';
+  toast(`＋ 已新增 ${cno}`);
+}
+
+/* ══════════════════════════════
+   IMPORT
+══════════════════════════════ */
+function openImport() {
+  document.getElementById('import-overlay').classList.add('show');
+  document.getElementById('cmap-wrap').style.display = 'none';
+  document.getElementById('i-ok').disabled = true;
+  xlsH = []; xlsD = [];
+}
+function closeImport() { document.getElementById('import-overlay').classList.remove('show'); }
+function importOutside(e) { if (e.target.id === 'import-overlay') closeImport(); }
+
+function dOver(e)  { e.preventDefault(); document.getElementById('dzone').classList.add('drag-over'); }
+function dLeave()  { document.getElementById('dzone').classList.remove('drag-over'); }
+function dDrop(e)  { e.preventDefault(); dLeave(); if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]); }
+function fileSel(inp) { if (inp.files[0]) readFile(inp.files[0]); }
+
+function excelDateToStr(n) {
+  /* Excel serial date → YYYY.MM.DD */
+  const d = new Date(Math.round((n - 25569) * 86400 * 1000));
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth()+1).padStart(2,'0');
+  const day = String(d.getUTCDate()).padStart(2,'0');
+  return `${y}.${m}.${day}`;
+}
+
+function readFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type:'binary' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+      if (raw.length < 2) { toast('資料不足', 'warn'); return; }
+
+      /* 自動偵測航次資訊行 */
+      let voyText = '', headerRow = 0;
+      for (let i = 0; i < Math.min(4, raw.length); i++) {
+        const s = raw[i].join(' ').trim();
+        if (/航次|BR|進口|船掛/.test(s) && s.length > 4) {
+          /* 把 Excel 日期序號換成真實日期 */
+          voyText = s.replace(/\b(\d{4,6})\b/g, (m, n) => {
+            const num = parseInt(n);
+            return (num > 40000 && num < 60000) ? excelDateToStr(num) : m;
+          }).replace(/\s+/g, ' ');
+          headerRow = i + 1;
+          break;
+        }
+      }
+
+      xlsH = raw[headerRow].map(String);
+      xlsD = raw.slice(headerRow + 1);
+
+      if (voyText) {
+        document.getElementById('bar-voyage').textContent = voyText;
+        localStorage.setItem('ctr4-voyage', voyText);
+      }
+      buildMap();
+    } catch { toast('讀取失敗，請確認格式', 'warn'); }
+  };
+  reader.readAsBinaryString(file);
+}
+
+const FIELDS = [
+  { key:'seq',  label:'艙號',       hints:['艙號','艙位','槽位','觸槽'] },
+  { key:'cno',  label:'國際櫃號 *', hints:['貨櫃號碼','貨標號碼','櫃號','container','cno','箱號','貨標'] },
+  { key:'esn',  label:'海關封條',   hints:['esn','海關封條','封條號碼','海關封'] },
+  { key:'seal', label:'大陸封條',   hints:['大陸','seal','中封','cnsl','大陸封'] },
+  { key:'loc',  label:'卸存地代碼', hints:['卸存','儲位','即存','location','loc','yard','代碼','即存地'] },
+  { key:'size', label:'貨櫃尺寸',   hints:['尺寸','size','type','箱型'] },
+];
+
+function buildMap() {
+  document.getElementById('cmap-body').innerHTML = FIELDS.map(f => {
+    const auto = xlsH.find(h => f.hints.some(ht => h.toLowerCase().includes(ht.toLowerCase()))) || '';
+    const opts = ['（略過）', ...xlsH].map(h =>
+      `<option value="${h}"${h === auto ? ' selected' : ''}>${h}</option>`
+    ).join('');
+    return `<tr><td>${f.label}</td><td><select id="mp-${f.key}">${opts}</select></td></tr>`;
+  }).join('');
+  document.getElementById('cmap-wrap').style.display = 'block';
+  document.getElementById('i-ok').disabled = false;
+}
+
+async function doImport() {
+  const map = {};
+  FIELDS.forEach(f => {
+    const v = document.getElementById(`mp-${f.key}`).value;
+    if (v && v !== '（略過）') map[f.key] = xlsH.indexOf(v);
+  });
+  if (map.cno === undefined) { toast('請對應「國際櫃號」欄位', 'warn'); return; }
+
+  // 自動找 PS 封條欄（不在 FIELDS 裡，自動偵測）
+  const psIdx = xlsH.findIndex(h => /^ps/i.test(h.trim()) || /封條.*2|第二.*封/i.test(h));
+  const imp = xlsD
+    .filter(row => String(row[map.cno]||'').trim())
+    .map((row, i) => ({
+      id:   Date.now() + i,
+      done: false,
+      seq:  map.seq  !== undefined ? String(row[map.seq]||'').trim() : '',
+      cno:  String(row[map.cno]||'').trim().toUpperCase(),
+      esn:  map.esn  !== undefined ? String(row[map.esn]||'').trim().toUpperCase() : '',
+      esn2: psIdx >= 0 ? String(row[psIdx]||'').trim().toUpperCase() : '',
+      seal: map.seal !== undefined ? String(row[map.seal]||'').trim() : '',
+      loc:  map.loc  !== undefined ? String(row[map.loc]||'').trim().toUpperCase() : '',
+      size: map.size !== undefined ? String(row[map.size]||'').trim() : '',
+    }));
+
+  if (!imp.length) { toast('沒有找到有效資料', 'warn'); return; }
+  rows = imp;
+  save();
+
+  /* voyage 只顯示原始航次文字，不附加筆數 */
+  const voy = localStorage.getItem('ctr4-voyage');
+  if (!voy) document.getElementById('bar-voyage').textContent = `已匯入 ${rows.length} 筆`;
+
+  closeImport();
+  document.getElementById('fi').value = '';
+  render();
+  toast(`✅ 已匯入 ${imp.length} 筆資料`);
+
+  // 匯入新的一批資料時，視為新的 session（重置 sbSessionId 後上傳）
+  // 明確等待上傳完成，確保 sbSessionId 準備好之後，使用者的操作才能正確同步
+  sbSessionId = null;
+  showSyncStatus('☁️ 正在建立雲端紀錄…');
+  await sbUploadFull();
+  showSyncStatus('☁️ 雲端紀錄已就緒');
+}
+
+/* ══════════════════════════════
+   TOAST
+══════════════════════════════ */
+function toast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('show'), 2400);
+}
+</script>
+</body>
+</html>

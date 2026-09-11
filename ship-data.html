@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-TW" style="background:#ffffff;color-scheme:light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>船舶資料管理</title>
+<style>
+:root {
+  --cyan:  #1a7bbf;
+  --amber: #c07000;
+  --red:   #cc2222;
+  --txt:   #111111;
+  --txt2:  #444444;
+  --mono: 'SF Mono','Menlo','Consolas','Courier New',monospace;
+}
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent }
+html, body { overflow-x:hidden; font-size:16px }
+body {
+  background:#ffffff !important; color:#111111 !important;
+  font-family:-apple-system,'PingFang TC','Microsoft JhengHei',sans-serif;
+  color-scheme:light;
+}
+
+#top {
+  position:sticky; top:0; z-index:200;
+  background:#f2f4f6; border-bottom:2px solid var(--cyan);
+  padding:10px 14px;
+}
+.bar1 { display:flex; align-items:center; justify-content:space-between; gap:8px }
+.app-title { font-size:.95rem; font-weight:900; letter-spacing:2px; color:#1a5a8a }
+.tbtn {
+  border:1px solid rgba(0,0,0,.2); border-radius:6px; padding:7px 12px;
+  font-size:.78rem; font-weight:700; cursor:pointer; font-family:inherit;
+  background:#ffffff; color:#333333; white-space:nowrap;
+}
+
+main { padding:16px; padding-bottom:90px }
+
+.empty { text-align:center; padding:60px 20px; color:#777777; font-size:.9rem; line-height:2 }
+.empty .ico { font-size:2.2rem; margin-bottom:10px }
+
+.ship-card {
+  background:#ffffff; border:1px solid rgba(0,0,0,.12); border-radius:10px;
+  padding:14px 16px; margin-bottom:10px;
+  display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+}
+.sc-info { flex:1; min-width:0 }
+.sc-name { font-size:.95rem; font-weight:800; color:var(--txt); margin-bottom:6px }
+.sc-meta { display:flex; flex-direction:column; gap:3px; font-size:.78rem; color:var(--txt2) }
+.sc-meta span b { color:var(--cyan); font-weight:700 }
+.sc-actions { display:flex; flex-direction:column; gap:6px; flex-shrink:0 }
+.sc-btn {
+  border:1px solid rgba(0,0,0,.15); border-radius:6px; padding:6px 10px;
+  font-size:.7rem; font-weight:700; cursor:pointer; font-family:inherit;
+  background:#ffffff; white-space:nowrap;
+}
+.sc-btn-edit { color:var(--cyan); border-color:rgba(26,123,191,.3) }
+.sc-btn-del  { color:var(--red); border-color:rgba(204,34,34,.3) }
+
+.dlg-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.5);
+  z-index:400; display:none; align-items:center; justify-content:center; padding:20px;
+}
+.dlg-overlay.show { display:flex }
+.dlg-box {
+  background:#ffffff; border:1px solid rgba(0,0,0,.15); border-radius:12px;
+  padding:22px 20px 18px; max-width:360px; width:100%;
+  box-shadow:0 8px 32px rgba(0,0,0,.18);
+  max-height:88vh; overflow-y:auto;
+}
+.dlg-box h3 { font-size:.95rem; font-weight:800; color:#111111; margin-bottom:16px }
+.field { margin-bottom:14px; text-align:left }
+.field label {
+  display:block; font-size:.72rem; font-weight:700; color:#444444;
+  letter-spacing:.5px; margin-bottom:6px;
+}
+.field input {
+  width:100%; padding:10px 12px; border:1.5px solid rgba(0,0,0,.15);
+  border-radius:8px; font-size:.88rem; font-family:inherit; color:#111111;
+  outline:none; background:#ffffff;
+}
+.field input:focus { border-color:var(--cyan) }
+.field-hint { font-size:.68rem; color:#999999; margin-top:4px }
+
+.dlg-error { color:var(--red); font-size:.75rem; font-weight:600; min-height:18px; margin-bottom:6px }
+.dlg-btns { display:flex; gap:8px; margin-top:6px }
+.dlg-cancel {
+  flex:1; padding:10px; background:none; border:1px solid rgba(0,0,0,.2);
+  color:#555555; border-radius:8px; font-size:.85rem; cursor:pointer; font-family:inherit;
+}
+.dlg-ok {
+  flex:1; padding:10px; background:var(--cyan); color:#fff; border:none;
+  border-radius:8px; font-size:.85rem; font-weight:800; cursor:pointer; font-family:inherit;
+}
+.dlg-ok.danger { background:var(--red) }
+
+.fab {
+  position:fixed; bottom:24px; right:20px; z-index:150;
+  width:52px; height:52px; border-radius:50%;
+  background:var(--cyan); color:#fff; border:none;
+  font-size:1.5rem; cursor:pointer;
+  box-shadow:0 4px 14px rgba(26,123,191,.4);
+  display:flex; align-items:center; justify-content:center;
+}
+
+.toast {
+  position:fixed; bottom:90px; left:50%; transform:translateX(-50%) translateY(8px);
+  background:#1a7bbf; border:1px solid #1a7bbf; color:#fff;
+  padding:9px 18px; border-radius:20px; font-size:.78rem; font-weight:700;
+  opacity:0; transition:all .25s; pointer-events:none; z-index:600; white-space:nowrap;
+}
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0) }
+.toast.warn { background:var(--amber); border-color:var(--amber) }
+</style>
+</head>
+<body>
+
+<div id="top">
+  <div class="bar1">
+    <span class="app-title">船舶資料管理</span>
+    <button class="tbtn" onclick="location.href='manifest.html'">← 返回艙單系統</button>
+  </div>
+</div>
+
+<main>
+  <div id="list"></div>
+</main>
+
+<button class="fab" onclick="openAdd()">＋</button>
+
+<!-- ════ ADD/EDIT DIALOG ════ -->
+<div class="dlg-overlay" id="dlg-edit">
+  <div class="dlg-box">
+    <h3 id="dlg-title">新增船舶資料</h3>
+
+    <div class="field">
+      <label>船名 *</label>
+      <input type="text" id="f-ship-name" placeholder="例如：輯薪輪">
+    </div>
+
+    <div class="field">
+      <label>船舶呼號</label>
+      <input type="text" id="f-call-sign" placeholder="例如：BP3379">
+    </div>
+
+    <div class="field">
+      <label>船長姓名</label>
+      <input type="text" id="f-captain" placeholder="例如：姜大炎">
+    </div>
+
+    <div class="field">
+      <label>總/淨噸數</label>
+      <input type="text" id="f-tonnage" placeholder="例如：1486/445">
+    </div>
+
+    <div class="dlg-error" id="dlg-error"></div>
+
+    <div class="dlg-btns">
+      <button class="dlg-cancel" onclick="closeDlg()">取消</button>
+      <button class="dlg-ok" id="dlg-submit" onclick="submitForm()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ DELETE CONFIRM ════ -->
+<div class="dlg-overlay" id="dlg-delete">
+  <div class="dlg-box" style="text-align:center">
+    <h3>🗑 刪除船舶資料</h3>
+    <p style="font-size:.8rem;color:#444444;margin-bottom:16px" id="delete-text">確定要刪除嗎？</p>
+    <div class="dlg-btns">
+      <button class="dlg-cancel" onclick="closeDeleteDlg()">取消</button>
+      <button class="dlg-ok danger" onclick="doDelete()">確定刪除</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SB_URL = 'https://ruziacdggdfyvlbcjnan.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1emlhY2RnZ2RmeXZsYmNqbmFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NzE1OTEsImV4cCI6MjEwMDQ0NzU5MX0.3P7SzY2EfKtUTcuaBB0fMY0FOIdp_X3KmkfRnL8wuSg';
+
+(function checkAuth() {
+  const saved = localStorage.getItem('ctr-auth') || sessionStorage.getItem('ctr-auth');
+  if (!saved) { window.location.replace('index.html'); return; }
+  try {
+    const auth = JSON.parse(saved);
+    if (!auth || !auth.username) throw new Error('invalid');
+  } catch(e) {
+    window.location.replace('index.html');
+  }
+})();
+
+let ships = [];
+let editingId = null;
+let pendingDeleteId = null;
+
+async function loadShips() {
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/ships?select=*&order=ship_name.asc`, {
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+    });
+    if (!res.ok) throw new Error('連線失敗');
+    ships = await res.json();
+    render();
+  } catch(e) {
+    document.getElementById('list').innerHTML = '<div class="empty">⚠️ 載入失敗，請檢查網路連線</div>';
+  }
+}
+
+function render() {
+  const listEl = document.getElementById('list');
+  if (!ships.length) {
+    listEl.innerHTML = `<div class="empty">
+      <div class="ico">🚢</div>
+      尚未有船舶資料<br>
+      <span style="font-size:.78rem">點右下角「＋」新增第一筆</span>
+    </div>`;
+    return;
+  }
+
+  listEl.innerHTML = ships.map(s => `
+    <div class="ship-card">
+      <div class="sc-info">
+        <div class="sc-name">${escapeHtml(s.ship_name)}</div>
+        <div class="sc-meta">
+          ${s.call_sign ? `<span>船舶呼號：<b>${escapeHtml(s.call_sign)}</b></span>` : ''}
+          ${s.captain_name ? `<span>船長姓名：<b>${escapeHtml(s.captain_name)}</b></span>` : ''}
+          ${s.gross_net_tonnage ? `<span>總/淨噸數：<b>${escapeHtml(s.gross_net_tonnage)}</b></span>` : ''}
+        </div>
+      </div>
+      <div class="sc-actions">
+        <button class="sc-btn sc-btn-edit" onclick="openEdit('${s.id}')">編輯</button>
+        <button class="sc-btn sc-btn-del" onclick="askDelete('${s.id}')">刪除</button>
+      </div>
+    </div>`).join('');
+}
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s || '';
+  return div.innerHTML;
+}
+
+function openAdd() {
+  editingId = null;
+  document.getElementById('dlg-title').textContent = '新增船舶資料';
+  document.getElementById('f-ship-name').value = '';
+  document.getElementById('f-call-sign').value = '';
+  document.getElementById('f-captain').value = '';
+  document.getElementById('f-tonnage').value = '';
+  document.getElementById('dlg-error').textContent = '';
+  document.getElementById('dlg-edit').classList.add('show');
+}
+
+function openEdit(id) {
+  const s = ships.find(x => x.id === id);
+  if (!s) return;
+  editingId = id;
+  document.getElementById('dlg-title').textContent = '編輯船舶資料';
+  document.getElementById('f-ship-name').value = s.ship_name;
+  document.getElementById('f-call-sign').value = s.call_sign || '';
+  document.getElementById('f-captain').value = s.captain_name || '';
+  document.getElementById('f-tonnage').value = s.gross_net_tonnage || '';
+  document.getElementById('dlg-error').textContent = '';
+  document.getElementById('dlg-edit').classList.add('show');
+}
+
+function closeDlg() {
+  document.getElementById('dlg-edit').classList.remove('show');
+}
+
+async function submitForm() {
+  const shipName = document.getElementById('f-ship-name').value.trim();
+  const callSign = document.getElementById('f-call-sign').value.trim();
+  const captain = document.getElementById('f-captain').value.trim();
+  const tonnage = document.getElementById('f-tonnage').value.trim();
+  const errEl = document.getElementById('dlg-error');
+  const btnEl = document.getElementById('dlg-submit');
+
+  if (!shipName) { errEl.textContent = '請輸入船名'; return; }
+
+  errEl.textContent = '';
+  btnEl.textContent = '儲存中…';
+  btnEl.disabled = true;
+
+  try {
+    const payload = { ship_name: shipName, call_sign: callSign, captain_name: captain, gross_net_tonnage: tonnage };
+
+    if (editingId) {
+      const res = await fetch(`${SB_URL}/rest/v1/ships?id=eq.${editingId}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY,
+          'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(await res.text());
+    } else {
+      const res = await fetch(`${SB_URL}/rest/v1/ships`, {
+        method: 'POST',
+        headers: {
+          'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY,
+          'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(await res.text());
+    }
+
+    closeDlg();
+    await loadShips();
+    toast(editingId ? '✅ 已更新船舶資料' : '✅ 已新增船舶資料');
+  } catch(e) {
+    errEl.textContent = '儲存失敗：' + (e.message || '請稍後再試');
+  } finally {
+    btnEl.textContent = '儲存';
+    btnEl.disabled = false;
+  }
+}
+
+function askDelete(id) {
+  const s = ships.find(x => x.id === id);
+  if (!s) return;
+  pendingDeleteId = id;
+  document.getElementById('delete-text').textContent = `確定要刪除「${s.ship_name}」嗎？此動作無法復原。`;
+  document.getElementById('dlg-delete').classList.add('show');
+}
+
+function closeDeleteDlg() {
+  document.getElementById('dlg-delete').classList.remove('show');
+  pendingDeleteId = null;
+}
+
+async function doDelete() {
+  if (!pendingDeleteId) return;
+  const id = pendingDeleteId;
+  closeDeleteDlg();
+
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/ships?id=eq.${id}`, {
+      method: 'DELETE',
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+    });
+    if (!res.ok) throw new Error('刪除失敗');
+    await loadShips();
+    toast('🗑 已刪除');
+  } catch(e) {
+    toast('⚠️ 刪除失敗，請稍後再試', true);
+  }
+}
+
+function toast(msg, warn=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (warn ? ' warn' : '');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+loadShips();
+</script>
+</body>
+</html>

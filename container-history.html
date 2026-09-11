@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-TW" style="background:#ffffff;color-scheme:light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>歷史紀錄</title>
+<style>
+:root {
+  --cyan:  #1a7bbf;
+  --amber: #c07000;
+  --red:   #cc2222;
+  --txt:   #111111;
+  --txt2:  #444444;
+  --mono: 'SF Mono','Menlo','Consolas','Courier New',monospace;
+}
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent }
+html, body { overflow-x:hidden; font-size:16px }
+body {
+  background:#ffffff !important; color:#111111 !important;
+  font-family:-apple-system,'PingFang TC','Microsoft JhengHei',sans-serif;
+  color-scheme:light;
+}
+
+#top {
+  position:sticky; top:0; z-index:100;
+  background:#f2f4f6; border-bottom:2px solid var(--cyan);
+  padding:10px 14px;
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+}
+.title { font-size:.95rem; font-weight:900; letter-spacing:2px; color:#1a5a8a }
+.back-btn {
+  border:1px solid rgba(0,0,0,.2); border-radius:6px; padding:8px 13px;
+  font-size:.8rem; font-weight:700; cursor:pointer; font-family:inherit;
+  background:#ffffff; color:#333333; white-space:nowrap;
+}
+
+main { padding:14px }
+
+.session-card {
+  background:#ffffff; border:1px solid rgba(0,0,0,.12); border-radius:10px;
+  padding:14px 16px; margin-bottom:12px; cursor:pointer;
+  transition:box-shadow .15s;
+  position:relative;
+}
+.session-card:active { box-shadow:0 2px 10px rgba(0,0,0,.10) }
+
+.delete-btn {
+  position:absolute; top:12px; right:12px;
+  background:none; border:1px solid rgba(204,34,34,.3); border-radius:6px;
+  color:var(--red); font-size:.7rem; font-weight:700;
+  padding:5px 9px; cursor:pointer; font-family:inherit;
+  z-index:2;
+}
+
+/* ── Delete confirm dialog ── */
+.confirm-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.6);
+  z-index:400; display:none; align-items:center; justify-content:center; padding:20px;
+}
+.confirm-overlay.show { display:flex }
+.confirm-box {
+  background:#ffffff; border:1px solid rgba(0,0,0,.15); border-radius:12px;
+  padding:22px 20px 18px; max-width:300px; width:100%; text-align:center;
+  box-shadow:0 8px 32px rgba(0,0,0,.18);
+}
+.confirm-box h3 { font-size:.9rem; font-weight:800; color:var(--txt); margin-bottom:8px }
+.confirm-box p { font-size:.75rem; color:var(--txt2); line-height:1.6; margin-bottom:16px }
+.confirm-btns { display:flex; gap:8px }
+.confirm-cancel {
+  flex:1; padding:10px; background:none; border:1px solid rgba(0,0,0,.2);
+  color:#555555; border-radius:8px; font-size:.85rem; cursor:pointer; font-family:inherit;
+}
+.confirm-delete {
+  flex:1; padding:10px; background:var(--red); color:#fff; border:none;
+  border-radius:8px; font-size:.85rem; font-weight:800; cursor:pointer; font-family:inherit;
+}
+
+.session-date { font-size:1rem; font-weight:800; color:var(--txt); margin-bottom:4px }
+.session-voyage { font-size:.78rem; color:var(--amber); font-weight:600; margin-bottom:8px }
+.session-meta { display:flex; gap:14px; font-size:.75rem; color:var(--txt2); flex-wrap:wrap }
+.session-meta b { color:var(--cyan); font-weight:800 }
+.session-expire { font-size:.7rem; color:#999999; margin-top:6px }
+
+.empty { text-align:center; padding:60px 20px; color:var(--txt2); font-size:.9rem; line-height:2 }
+.loading { text-align:center; padding:40px; color:var(--txt2); font-size:.85rem }
+
+/* ── Detail overlay ── */
+.overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.6);
+  z-index:300; display:none; align-items:flex-end; justify-content:center;
+}
+.overlay.show { display:flex }
+.detail-panel {
+  background:#ffffff; border-radius:16px 16px 0 0;
+  width:100%; max-width:600px; max-height:85vh; overflow-y:auto;
+  padding:18px 16px 30px;
+}
+.detail-panel h2 { font-size:1rem; font-weight:800; margin-bottom:4px }
+.detail-panel .sub { font-size:.75rem; color:var(--txt2); margin-bottom:14px }
+
+table { width:100%; border-collapse:collapse; font-size:.78rem }
+thead th {
+  background:#e8ecf0; color:#222222; font-size:.65rem; font-weight:800;
+  padding:6px 5px; text-align:left; border-bottom:2px solid var(--cyan);
+  border-right:1px solid rgba(0,0,0,.10);
+}
+td { padding:6px 5px; border-bottom:1px solid rgba(0,0,0,.08); border-right:1px solid rgba(0,0,0,.08); color:#111111 }
+tr.done td { text-decoration:line-through; color:#999999 }
+.cno-cell { font-family:var(--mono); font-weight:700; color:var(--red) }
+
+.close-btn {
+  width:100%; padding:12px; margin-top:14px;
+  background:none; border:1px solid rgba(0,0,0,.2); border-radius:8px;
+  color:var(--txt2); font-size:.85rem; cursor:pointer; font-family:inherit;
+}
+</style>
+</head>
+<body>
+
+<div id="top">
+  <span class="title">📋 歷史紀錄</span>
+  <button class="back-btn" onclick="location.href='container-checklist.html'">← 返回對單</button>
+</div>
+
+<main>
+  <div id="list" class="loading">載入中…</div>
+</main>
+
+<div class="overlay" id="detail-overlay" onclick="closeDetailOutside(event)">
+  <div class="detail-panel">
+    <h2 id="detail-title">—</h2>
+    <div class="sub" id="detail-sub">—</div>
+    <table>
+      <thead>
+        <tr>
+          <th>國際櫃號</th>
+          <th>海關封條</th>
+          <th>大陸封條</th>
+          <th>卸存地</th>
+          <th style="text-align:center">狀態</th>
+        </tr>
+      </thead>
+      <tbody id="detail-tbody"></tbody>
+    </table>
+    <button class="close-btn" onclick="closeDetail()">關閉</button>
+  </div>
+</div>
+
+<!-- ── DELETE CONFIRM ── -->
+<div class="confirm-overlay" id="delete-confirm">
+  <div class="confirm-box">
+    <h3>🗑 刪除這筆紀錄？</h3>
+    <p id="delete-confirm-text">確定要刪除這筆歷史紀錄嗎？<br>刪除後無法復原。</p>
+    <div class="confirm-btns">
+      <button class="confirm-cancel" onclick="closeDeleteConfirm()">取消</button>
+      <button class="confirm-delete" onclick="doDelete()">確定刪除</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SB_URL = 'https://ruziacdggdfyvlbcjnan.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1emlhY2RnZ2RmeXZsYmNqbmFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NzE1OTEsImV4cCI6MjEwMDQ0NzU5MX0.3P7SzY2EfKtUTcuaBB0fMY0FOIdp_X3KmkfRnL8wuSg';
+
+// 登入保護
+(function checkAuth() {
+  const saved = localStorage.getItem('ctr-auth') || sessionStorage.getItem('ctr-auth');
+  if (!saved) { window.location.replace('index.html'); }
+})();
+
+let allSessions = [];
+
+async function loadHistory() {
+  try {
+    const res = await fetch(
+      `${SB_URL}/rest/v1/sessions?select=*&order=updated_at.desc`,
+      { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } }
+    );
+    if (!res.ok) throw new Error('連線失敗');
+    allSessions = await res.json();
+    renderList();
+  } catch(e) {
+    document.getElementById('list').innerHTML = '<div class="empty">⚠️ 載入失敗，請檢查網路連線</div>';
+  }
+}
+
+function renderList() {
+  const listEl = document.getElementById('list');
+  if (!allSessions.length) {
+    listEl.innerHTML = '<div class="empty">📭 目前沒有歷史紀錄<br><span style="font-size:.78rem">匯入 Excel 後會自動顯示在這裡</span></div>';
+    return;
+  }
+
+  listEl.innerHTML = allSessions.map((s, i) => {
+    const total = s.rows ? s.rows.length : 0;
+    const done = s.rows ? s.rows.filter(r => r.done).length : 0;
+    const expiresIn = s.expires_at ? getTimeLeft(s.expires_at) : '';
+    return `
+      <div class="session-card" onclick="openDetail(${i})">
+        <button class="delete-btn" onclick="event.stopPropagation(); askDelete(${i})">🗑 刪除</button>
+        <div class="session-date">📅 ${s.date}</div>
+        <div class="session-voyage">${s.voyage || '（無航次資訊）'}</div>
+        <div class="session-meta">
+          <span>總計 <b>${total}</b> 筆</span>
+          <span>已對 <b>${done}</b> 筆</span>
+        </div>
+        <div class="session-meta" style="margin-top:2px">
+          <span>建立者：${(s.created_by || s.updated_by || '—').split('|')[0]}</span>
+          <span>更新者：${(s.updated_by || '—').split('|')[0]}</span>
+        </div>
+        <div class="session-expire">⏳ ${expiresIn}</div>
+      </div>`;
+  }).join('');
+}
+
+function getTimeLeft(expiresAt) {
+  const diff = new Date(expiresAt) - new Date();
+  if (diff <= 0) return '即將被清除';
+  const hrs = Math.floor(diff / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+  return `約 ${hrs} 小時 ${mins} 分後自動清除`;
+}
+
+function openDetail(i) {
+  const s = allSessions[i];
+  document.getElementById('detail-title').textContent = s.date;
+  document.getElementById('detail-sub').textContent = s.voyage || '（無航次資訊）';
+
+  const tbody = document.getElementById('detail-tbody');
+  tbody.innerHTML = (s.rows || []).map(r => `
+    <tr class="${r.done ? 'done' : ''}">
+      <td class="cno-cell">${r.cno || ''}</td>
+      <td>${r.esn || '—'}${r.esn2 ? '<br>' + r.esn2 : ''}</td>
+      <td>${r.seal || '—'}</td>
+      <td>${r.loc || '—'}</td>
+      <td style="text-align:center">${r.done ? '✓ 已對' : '○ 未對'}${r.marked ? ' 🔵' : ''}</td>
+    </tr>`).join('');
+
+  document.getElementById('detail-overlay').classList.add('show');
+}
+
+function closeDetail() {
+  document.getElementById('detail-overlay').classList.remove('show');
+}
+function closeDetailOutside(e) {
+  if (e.target.id === 'detail-overlay') closeDetail();
+}
+
+/* ── DELETE ── */
+let pendingDeleteIdx = null;
+
+function askDelete(i) {
+  pendingDeleteIdx = i;
+  const s = allSessions[i];
+  document.getElementById('delete-confirm-text').innerHTML =
+    `確定要刪除 <b>${s.date}</b> 這筆紀錄嗎？<br>（${s.voyage || '無航次資訊'}）<br>刪除後無法復原。`;
+  document.getElementById('delete-confirm').classList.add('show');
+}
+
+function closeDeleteConfirm() {
+  document.getElementById('delete-confirm').classList.remove('show');
+  pendingDeleteIdx = null;
+}
+
+async function doDelete() {
+  if (pendingDeleteIdx === null) return;
+  const s = allSessions[pendingDeleteIdx];
+  closeDeleteConfirm();
+
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/sessions?id=eq.${s.id}`, {
+      method: 'DELETE',
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+    });
+    if (!res.ok) throw new Error('刪除失敗');
+
+    // 從畫面上移除
+    allSessions = allSessions.filter(x => x.id !== s.id);
+    renderList();
+  } catch(e) {
+    alert('刪除失敗，請檢查網路連線後再試一次');
+  }
+}
+
+loadHistory();
+</script>
+</body>
+</html>
