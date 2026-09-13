@@ -2745,17 +2745,32 @@ async function buildManifestXlsx(loc) {
       // 再建立廠商備用列後，中間可能還存在其他資料列或空白列。
       // 因此不能用 getRow(insertStart + delta) 精準猜固定內容位置，
       // 改成尋找「插入後第一個 >= insertStart + delta 的既有 row」作為插入錨點。
-      const footerAfter = Array.from(sheetData.getElementsByTagNameNS(NS, 'row'))
-        .filter(row => row.parentNode === sheetData && Number(row.getAttribute('r')) >= insertStart + delta)
-        .sort((a, b) => Number(a.getAttribute('r')) - Number(b.getAttribute('r')))[0];
-      if (!footerAfter) throw new Error(`建立廠商備用列失敗：第 ${insertStart} 列之後找不到固定內容`);
+      // 不能假設「固定內容」一定存在於 insertStart + delta 之後。
+      // 多筆資料先動態展開、再依廠商插入備用列時，固定區的位置會隨每個工作表的
+      // Template 結構而變動；有些工作表的最後一個固定 row 也可能沒有以 row 節點存在。
+      // 因此只尋找「目前確實存在、且位於插入區之後」的第一個 row 當錨點；
+      // 找不到時直接 append 到 sheetData 尾端，不應把它視為錯誤。
+      const footerAfter = api.rows()
+        .filter(row => Number(row.getAttribute('r')) >= insertStart + delta)
+        .sort((a, b) => Number(a.getAttribute('r')) - Number(b.getAttribute('r')))[0] || null;
+
+      // 實際插入時以 row 號排序，而不是依賴 footerAfter 一定存在。
+      // 這樣即使工作表沒有明確的固定內容 row 節點，XML 的 row 順序仍然正確。
+      const insertReserveRow = (row) => {
+        const targetRow = Number(row.getAttribute('r'));
+        const before = api.rows()
+          .filter(existing => Number(existing.getAttribute('r')) > targetRow)
+          .sort((a, b) => Number(a.getAttribute('r')) - Number(b.getAttribute('r')))[0];
+        if (before) sheetData.insertBefore(row, before);
+        else sheetData.appendChild(row);
+      };
 
       const reserveRows = [];
       if (rowsPerItem === 1) {
         for (let i = 0; i < VENDOR_RESERVE_COUNT; i++) {
           const newRow = insertStart + i;
           const clone = cloneReserveRow(sheetXml, sourceRow, newRow, clearCols);
-          sheetData.insertBefore(clone, footerAfter);
+          insertReserveRow(clone);
           // 每一筆備用列都必須複製 Template 原本的合併儲存格。
           // 之前只複製第1筆，導致第2筆開始格式/合併範圍與 Template 不一致。
           copyMergeRefs(sheetXml, sourceRow, sourceRow, newRow);
@@ -2767,8 +2782,8 @@ async function buildManifestXlsx(loc) {
           const newRow2 = newRow1 + 1;
           const clone1 = cloneReserveRow(sheetXml, sourceRow, newRow1, clearCols[0] || []);
           const clone2 = cloneReserveRow(sheetXml, sourceRow + 1, newRow2, clearCols[1] || []);
-          sheetData.insertBefore(clone1, footerAfter);
-          sheetData.insertBefore(clone2, footerAfter);
+          insertReserveRow(clone1);
+          insertReserveRow(clone2);
           copyMergeRefs(sheetXml, sourceRow, sourceRow + 1, newRow1);
           reserveRows.push([newRow1, newRow2]);
         }
