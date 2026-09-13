@@ -1706,7 +1706,28 @@ async function buildManifestXlsx(loc) {
       });
   }
 
-  function shiftRowsAndMerges(sheetXml, startRow, delta) {
+  // Excel 插入列時，不只 row/@r 要往下移，該工作表內「未加工作表名稱前綴」的公式列號也要一起位移。
+  // 例如原本 F17 = T17&...，在第17列開始插入10列後，原本那筆資料會變成第27列，
+  // 公式也必須同步變成 F27 = T27&...。
+  // 這個選項只在第六階段的廠商備用列插入時開啟；前面已測試完成的動態展開流程維持原行為不變。
+  function shiftLocalFormulaRows(sheetXml, startRow, delta) {
+    if (!delta) return;
+    const root = sheetXml.documentElement;
+    for (const cell of Array.from(root.getElementsByTagNameNS(NS, 'c'))) {
+      const f = cell.getElementsByTagNameNS(NS, 'f')[0];
+      if (!f || f.textContent == null) continue;
+      f.textContent = String(f.textContent).replace(
+        /(?<![A-Za-z0-9_!])((?:\$?[A-Z]{1,3}))(\$?)(\d+)\b/g,
+        (m, col, absRow, rowText) => {
+          const row = Number(rowText);
+          if (row < startRow) return m;
+          return `${col}${absRow}${row + delta}`;
+        }
+      );
+    }
+  }
+
+  function shiftRowsAndMerges(sheetXml, startRow, delta, shiftLocalFormulas = false) {
     if (!delta) return;
     const root = sheetXml.documentElement;
     const sheetData = root.getElementsByTagNameNS(NS,'sheetData')[0];
@@ -1738,6 +1759,10 @@ async function buildManifestXlsx(loc) {
     if (dimension) {
       const ref = dimension.getAttribute('ref');
       if (ref) dimension.setAttribute('ref', ref.replace(/(\d+)$/, m => String(Number(m) + delta)));
+    }
+
+    if (shiftLocalFormulas) {
+      shiftLocalFormulaRows(sheetXml, startRow, delta);
     }
   }
 
@@ -2735,7 +2760,8 @@ async function buildManifestXlsx(loc) {
       const insertStart = sourceRow + rowsPerItem;
       const delta = VENDOR_RESERVE_COUNT * rowsPerItem;
 
-      shiftRowsAndMerges(sheetXml, insertStart, delta);
+      // 第六階段才開啟同工作表公式列號同步；前面既有動態展開不改。
+      shiftRowsAndMerges(sheetXml, insertStart, delta, true);
 
       const api = sheetApi(sheetXml);
       const sheetData = api.sheetData;
@@ -2948,6 +2974,67 @@ async function buildManifestXlsx(loc) {
         { re: /進口艙單印1份!([A-Z]{1,3})16\b/g, to: (_, col) => `進口艙單印1份!${col}${mr}` }
       ], 10);
     }
+  }
+
+  // 原本已存在的「運送第1筆～第N筆」也要跟著艙單／貨櫃清單的實際最終列號更新。
+  // 廠商備用列插入後，原始第2、3筆等資料列可能已被往下推；如果只修改新增的隱藏運送單，
+  // 原本運送單就會繼續指向舊的第16／17／18列。這裡只處理既有運送單的跨工作表公式，不改運送單 Template 本身。
+  function finalManifestRowForItem(itemIndex) {
+    let extra = 0;
+    for (const group of getVendorGroups(items)) {
+      if (group.lastItemIndex < itemIndex) extra += VENDOR_RESERVE_COUNT;
+    }
+    return 16 + itemIndex + extra;
+  }
+
+  function finalCargoRowForItem(itemIndex) {
+    let extra = 0;
+    for (const group of getVendorGroups(items)) {
+      if (group.lastItemIndex < itemIndex) extra += VENDOR_RESERVE_COUNT * 2;
+    }
+    return 9 + itemIndex * 2 + extra;
+  }
+
+  // 找出 workbook 內目前已存在的運送單工作表。Template 的第1筆與前面第五階段
+  // 動態複製出的第2筆、第3筆……都屬於「既有運送單」，只更新它們引用的實際資料列。
+  const existingTransportSheets = Array.from(sheetsEl.getElementsByTagNameNS(NS, 'sheet'))
+    .map(sheet => ({
+      name: String(sheet.getAttribute('name') || ''),
+      rid: sheet.getAttributeNS(REL_NS, 'id') || sheet.getAttribute('r:id') || ''
+    }))
+    .filter(x => /^運送第\d+筆$/.test(x.name));
+
+  for (const info of existingTransportSheets) {
+    const m = info.name.match(/^運送第(\d+)筆$/);
+    const itemIndex = Number(m[1]) - 1;
+    if (itemIndex < 0 || itemIndex >= items.length) continue;
+
+    const rel = Array.from(relsXml.getElementsByTagName('Relationship'))
+      .find(r => String(r.getAttribute('Id') || '') === info.rid);
+    if (!rel) continue;
+
+    const target = String(rel.getAttribute('Target') || '');
+    const targetPath = target.startsWith('xl/') ? target : `xl/${target.replace(/^\//, '')}`;
+    const file = zip.file(targetPath);
+    if (!file) continue;
+
+    const xml = parser.parseFromString(await file.async('text'), 'application/xml');
+    const manifestRow = finalManifestRowForItem(itemIndex);
+    const cargoRow = finalCargoRowForItem(itemIndex);
+
+    for (const cell of Array.from(xml.getElementsByTagNameNS(NS, 'c'))) {
+      const f = cell.getElementsByTagNameNS(NS, 'f')[0];
+      if (!f || f.textContent == null) continue;
+      let formula = f.textContent;
+      formula = formula.replace(/(進口艙單印1份![A-Z]{1,3})\d+\b/g, `$1${manifestRow}`);
+      formula = formula.replace(/('貨櫃清單-1份'![A-Z]{1,3})\d+\b/g, `$1${cargoRow}`);
+      f.textContent = formula;
+      for (const v of Array.from(cell.getElementsByTagNameNS(NS, 'v'))) cell.removeChild(v);
+      const v = xml.createElementNS(NS, 'v');
+      v.textContent = '';
+      cell.appendChild(v);
+    }
+    zip.file(targetPath, serializer.serializeToString(xml));
   }
 
   // ── 運送單：每一家廠商另外預留 10 張隱藏運送單 ──
