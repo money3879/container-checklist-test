@@ -425,6 +425,7 @@ let nColumnTestRows = [];
 let manifestByLocation = {};
 let currentLocationTab = null;
 let currentView = 'table';
+const VENDOR_RESERVE_COUNT = 10;
 
 const CONTAINER_TYPE_MAP = {
   '40HC': '45G1',
@@ -1435,10 +1436,21 @@ async function renderExcelStyleView() {
     const items = manifestByLocation[currentLocationTab].items;
     const container = document.getElementById('excel-preview-table');
 
-    // 艙單預覽只顯示 Excel 的列印範圍。
-    // Template 1 筆時列印範圍是 A1:N19；每增加 1 筆資料，列印範圍跟著固定區往下延伸。
+    // 艙單預覽只顯示 Excel 的列印範圍，而且「隱藏備用列」不顯示。
+    // 匯出時列印範圍會包含備用列，因此預覽不能只抓原始 A1:N19，
+    // 必須先讀完整的匯出列印範圍，再跳過 hidden row，才能看到最後的合計／簽章區。
     const startRow = 1;
-    const endRow = Math.min(19 + Math.max(0, items.length - 1), ws.rowCount);
+    let endRow = ws.rowCount;
+    const printArea = ws.pageSetup && ws.pageSetup.printArea;
+    const printAreaMatch = String(printArea || '').match(/(?:!|^)[\$]?A[\$]?1:[\$]?N[\$]?(\d+)/i);
+    if (printAreaMatch) {
+      endRow = Math.min(Number(printAreaMatch[1]), ws.rowCount);
+    } else {
+      // ExcelJS 若未提供 printArea，依目前匯出規則計算艙單最後列。
+      const vendorCount = getVendorGroups(items).length;
+      const totalReserveManifest = vendorCount * VENDOR_RESERVE_COUNT;
+      endRow = Math.min(19 + Math.max(0, items.length - 1) + totalReserveManifest, ws.rowCount);
+    }
     const startCol = 1;
     const endCol = 14; // N 欄
 
@@ -1446,6 +1458,7 @@ async function renderExcelStyleView() {
     const spanMap = {};
     for (let r = startRow; r <= endRow; r++) {
       const row = ws.getRow(r);
+      if (row.hidden) continue;
       for (let c = startCol; c <= endCol; c++) {
         const cell = row.getCell(c);
         if (cell.isMerged && cell.master && cell.master.address !== cell.address) {
@@ -1486,6 +1499,7 @@ async function renderExcelStyleView() {
     let html = `<div class="excel-preview-page"><table class="excel-preview-real">${colgroup}<tbody>`;
     for (let r = startRow; r <= endRow; r++) {
       const row = ws.getRow(r);
+      if (row.hidden) continue;
       const rowHeight = row.height ? Math.max(16, row.height * 1.333) : 22;
       html += `<tr style="height:${rowHeight}px">`;
       for (let c = startCol; c <= endCol; c++) {
@@ -2614,8 +2628,6 @@ async function buildManifestXlsx(loc) {
   // 其餘工作表在該廠商最後一筆資料後增加 10 筆隱藏資料列。
   // 固定的收貨人／通知人／聯絡資訊等保留；主號、艙號、件數、櫃號、重量、封條留白。
   // ═══════════════════════════════════════════════════════════════════
-  const VENDOR_RESERVE_COUNT = 10;
-
   function reserveVendorKey(it) {
     const name = normalizeConsigneeName(it.matchedDbConsigneeName || it.consigneeName || '');
     const tax = String(it.taxId || '').replace(/\D/g, '');
@@ -2736,9 +2748,11 @@ async function buildManifestXlsx(loc) {
           const newRow = insertStart + i;
           const clone = cloneReserveRow(sheetXml, sourceRow, newRow, clearCols);
           sheetData.insertBefore(clone, footerAfter);
+          // 每一筆備用列都必須複製 Template 原本的合併儲存格。
+          // 之前只複製第1筆，導致第2筆開始格式/合併範圍與 Template 不一致。
+          copyMergeRefs(sheetXml, sourceRow, sourceRow, newRow);
           reserveRows.push(newRow);
         }
-        copyMergeRefs(sheetXml, sourceRow, sourceRow, insertStart);
       } else {
         for (let i = 0; i < VENDOR_RESERVE_COUNT; i++) {
           const newRow1 = insertStart + i * rowsPerItem;
