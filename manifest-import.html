@@ -1486,6 +1486,9 @@ async function renderExcelStyleView() {
     let html = `<div class="excel-preview-page"><table class="excel-preview-real">${colgroup}<tbody>`;
     for (let r = startRow; r <= endRow; r++) {
       const row = ws.getRow(r);
+      // Excel 預覽要遵守工作表的 hidden row 設定；10 筆備用資料雖在 Print Area 內，
+      // 但預設隱藏，所以預覽也不應把它們顯示出來。
+      if (row.hidden) continue;
       const rowHeight = row.height ? Math.max(16, row.height * 1.333) : 22;
       html += `<tr style="height:${rowHeight}px">`;
       for (let c = startCol; c <= endCol; c++) {
@@ -2844,8 +2847,10 @@ async function buildManifestXlsx(loc) {
     reserveSheetXml.set(name, parser.parseFromString(await zip.file(target).async('text'), 'application/xml'));
   }
 
-  const reserveManifest = insertReserveRowsForSheet(reserveSheetXml.get('進口艙單印1份'), items, 16, 1, ['A','C','E','I','P']);
-  const reserveT1 = insertReserveRowsForSheet(reserveSheetXml.get('T1快遞貨物訊息'), items, 3, 1, ['B','D','E','K','L']);
+  // 備用艙單列要清空：A主號、B艙號、C件數、E櫃號、I重量、P封條。
+  const reserveManifest = insertReserveRowsForSheet(reserveSheetXml.get('進口艙單印1份'), items, 16, 1, ['A','B','C','E','I','P']);
+  // 備用 T1 列要清空：A艙號、B主號、D櫃號、E封條、K封條、L重量；收貨人固定資料保留。
+  const reserveT1 = insertReserveRowsForSheet(reserveSheetXml.get('T1快遞貨物訊息'), items, 3, 1, ['A','B','D','E','K','L']);
   const reserveRed = insertReserveRowsForSheet(reserveSheetXml.get('准單(紅紙)-2份'), items, 22, 1, ['A','C','F','H','I']);
   const reserveApp = insertReserveRowsForSheet(reserveSheetXml.get('准單申請-1份 '), items, 22, 1, ['A','C','F','H','I']);
   const reserveCargo = insertReserveRowsForSheet(
@@ -2893,6 +2898,13 @@ async function buildManifestXlsx(loc) {
   // ── 運送單：每一家廠商另外預留 10 張隱藏運送單 ──
   // 既有運送第1筆、第2筆……等實際資料頁完全保留；只額外複製 10 張該廠商的運送單母版，
   // 並將它們設為 hidden。解除隱藏後，使用者只需填入對應的新櫃資料。
+  // 這裡重新取得母版資訊，讓「廠商備用運送單」區塊不依賴前面第五階段的區域變數，
+  // 避免不同版本合併後出現「sourceTransport is not defined」。
+  const vendorTransportSource = getWorksheetSheetInfo('運送第1筆');
+  const vendorTransportSourceXml = parser.parseFromString(
+    await zip.file(vendorTransportSource.target).async('text'),
+    'application/xml'
+  );
   const transportReserveGroups = buildVendorReserveGroups(items);
   let transportMaxSheetId = 0;
   for (const s of Array.from(sheetsEl.getElementsByTagNameNS(NS, 'sheet'))) {
@@ -2946,7 +2958,7 @@ async function buildManifestXlsx(loc) {
         const newTarget = `xl/worksheets/sheet${newSheetId}.xml`;
         const newLocalSheetId = Array.from(sheetsEl.getElementsByTagNameNS(NS, 'sheet')).length;
 
-        const newXml = sourceTransportXml.cloneNode(true);
+        const newXml = vendorTransportSourceXml.cloneNode(true);
         const root = newXml.documentElement;
         const manifestRow = groupStartManifestRow + reserveIndex;
         const cargoRow = groupStartCargoRow + reserveIndex * 2;
@@ -2976,7 +2988,7 @@ async function buildManifestXlsx(loc) {
 
         zip.file(newTarget, serializer.serializeToString(newXml));
 
-        const sourceRelPath = `xl/worksheets/_rels/${sourceTransport.target.split('/').pop()}.rels`;
+        const sourceRelPath = `xl/worksheets/_rels/${vendorTransportSource.target.split('/').pop()}.rels`;
         const newRelPath = `xl/worksheets/_rels/sheet${newSheetId}.xml.rels`;
         const sourceRelFile = zip.file(sourceRelPath);
         if (sourceRelFile) zip.file(newRelPath, await sourceRelFile.async('text'));
