@@ -419,6 +419,7 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 let ships = [];
 let consignees = [];
+let locations = [];
 let uploadedRows = null;
 let nColumnTestRows = [];
 let manifestByLocation = {};
@@ -452,16 +453,21 @@ function mapContainerTypeForManifest(rawType) {
 
 async function init() {
   try {
-    const [shipsRes, consigneesRes] = await Promise.all([
+    const [shipsRes, consigneesRes, locationsRes] = await Promise.all([
       fetch(`${SB_URL}/rest/v1/ships?select=*&order=ship_name.asc`, {
         headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
       }),
       fetch(`${SB_URL}/rest/v1/consignees?select=*`, {
         headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+      }),
+      fetch(`${SB_URL}/rest/v1/locations?select=location_code,location_display_name&order=location_code.asc`, {
+        headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
       })
     ]);
     ships = await shipsRes.json();
     consignees = await consigneesRes.json();
+    locations = await locationsRes.json();
+    if (!Array.isArray(locations)) throw new Error('卸存地主檔載入失敗');
 
     const sel = document.getElementById('f-ship-select');
     ships.filter(s => (s.ship_type || '一程船') === '一程船').forEach(s => {
@@ -499,11 +505,22 @@ function addLocationInput(value) {
   wrap.className = 'loc-card';
   wrap.id = `wrap-${id}`;
 
+  const locationSelect = document.createElement('select');
+  locationSelect.id = id;
+  locationSelect.innerHTML = '<option value="">請選擇卸存地</option>';
+  locations.forEach(loc => {
+    const opt = document.createElement('option');
+    opt.value = loc.location_code;
+    opt.textContent = loc.location_code;
+    locationSelect.appendChild(opt);
+  });
+  if (value) locationSelect.value = normalizeLocationCode(value);
+
   wrap.innerHTML = `
     <div class="loc-card-row">
       <div class="loc-card-field">
         <label>卸存地</label>
-        <input type="text" id="${id}" placeholder="例如 KHH0638S" style="text-transform:uppercase" value="${value||''}">
+        <div id="${id}-select-wrap"></div>
       </div>
       <div class="loc-card-field">
         <label>二程船（回台灣）</label>
@@ -513,6 +530,7 @@ function addLocationInput(value) {
     </div>
   `;
   document.getElementById('loc-list').appendChild(wrap);
+  document.getElementById(`${id}-select-wrap`).appendChild(locationSelect);
 }
 function removeLocationInput(id) {
   const wrap = document.getElementById(`wrap-${id}`);
@@ -521,10 +539,13 @@ function removeLocationInput(id) {
 function getLocationInputs() {
   const wraps = Array.from(document.querySelectorAll('.loc-card'));
   return wraps.map(wrap => {
-    const locInput = wrap.querySelector('input[id]:not([id$="-ship2"])');
+    const locInput = wrap.querySelector('select[id]');
     const ship2Input = wrap.querySelector('input[id$="-ship2"]');
+    const location = normalizeLocationCode(locInput ? locInput.value : '');
+    const locationMaster = locations.find(x => normalizeLocationCode(x.location_code) === location);
     return {
-      location: normalizeLocationCode(locInput.value),
+      location,
+      locationDisplayName: locationMaster ? String(locationMaster.location_display_name || '').trim() : '',
       ship2Name: ship2Input.value.trim()
     };
   }).filter(x => x.location);
@@ -1063,7 +1084,7 @@ function generatePreview() {
 
   const locationCodes = locationList.map(l => normalizeLocationCode(l.location));
   locationList.forEach(l => {
-    manifestByLocation[l.location] = { items: [], ship2Name: l.ship2Name };
+    manifestByLocation[l.location] = { items: [], ship2Name: l.ship2Name, locationDisplayName: l.locationDisplayName };
   });
 
   const sealCounter = {}; // key: `${consigneeName}|${location}`
@@ -1503,6 +1524,7 @@ async function buildManifestXlsx(loc) {
   if (typeof JSZip === 'undefined') throw new Error('Excel 元件載入失敗，請重新整理頁面');
   const meta = window._manifestMeta;
   const items = manifestByLocation[loc].items;
+  const locationDisplayName = manifestByLocation[loc].locationDisplayName || loc;
 
   const response = await fetch(TEMPLATE_PATH, { cache: 'no-store' });
   if (!response.ok) throw new Error(`找不到 Excel 範本：${TEMPLATE_PATH}（HTTP ${response.status}）`);
@@ -2274,6 +2296,9 @@ async function buildManifestXlsx(loc) {
   // 並完整沿用 Template 第13~14列的格式、合併儲存格與公式。
   // ═══════════════════════════════════════════════════════════════════
   const cargo = await loadSheetXmlByName('貨櫃清單-1份');
+  // 卸存地主檔：依網站選擇的卸存地代碼，將完整顯示名稱寫入貨櫃清單 C4:D4。
+  cargo.api.setValue('C4', locationDisplayName);
+
   const cargoStart = 9;
   const cargoTemplateCount = 1;
   const cargoExtra = Math.max(0, items.length - cargoTemplateCount);
@@ -2581,6 +2606,412 @@ async function buildManifestXlsx(loc) {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // 第六階段：每一家廠商預留 10 筆「隱藏備用資料列」
+  // 這一階段只在既有匯出結果完成後追加，不改動前面既有的資料比對／公式邏輯。
+  // 每個廠商以「DB 收貨人名稱＋統編」分組；每組最後一筆資料後預留 10 筆。
+  // 備用列會複製該廠商的固定資料，但清空：主號、櫃號、件數、重量、封條。
+  // 建船資料檔刻意排除，不增加任何備用列。
+  // ═══════════════════════════════════════════════════════════════════
+  const VENDOR_RESERVE_COUNT = 10;
+
+  function reserveVendorKey(it) {
+    const name = normalizeConsigneeName(it.matchedDbConsigneeName || it.consigneeName || '');
+    const tax = String(it.taxId || '').replace(/\D/g, '');
+    return `${name}||${tax}`;
+  }
+
+  function buildVendorReserveGroups(items) {
+    const lastIndex = new Map();
+    items.forEach((it, i) => lastIndex.set(reserveVendorKey(it), i));
+    return Array.from(lastIndex.entries())
+      .map(([key, lastItemIndex]) => ({ key, lastItemIndex }))
+      .sort((a, b) => b.lastItemIndex - a.lastItemIndex);
+  }
+
+  function clearCellContent(cell) {
+    while (cell.firstChild) cell.removeChild(cell.firstChild);
+    cell.removeAttribute('t');
+  }
+
+  function setRowHidden(row, hidden = true) {
+    if (hidden) row.setAttribute('hidden', '1');
+    else row.removeAttribute('hidden');
+  }
+
+  function cloneReserveRow(sheetXml, sourceRowNum, newRowNum, clearCols = []) {
+    const api = sheetApi(sheetXml);
+    const sourceRow = api.getRow(sourceRowNum);
+    if (!sourceRow) throw new Error(`找不到備用列來源第 ${sourceRowNum} 列`);
+    const clone = sourceRow.cloneNode(true);
+    clone.setAttribute('r', String(newRowNum));
+    setRowHidden(clone, true);
+
+    for (const cell of Array.from(clone.getElementsByTagNameNS(NS, 'c'))) {
+      const oldRef = cell.getAttribute('r');
+      if (!oldRef) continue;
+      const p = splitRef(oldRef);
+      cell.setAttribute('r', `${p.col}${newRowNum}`);
+
+      const f = cell.getElementsByTagNameNS(NS, 'f')[0];
+      if (f) {
+        // 備用列的公式若引用原資料列，改成引用自己的新列。
+        f.textContent = f.textContent.replace(new RegExp(`([A-Z]{1,3})${sourceRowNum}\\b`, 'g'), (_, col) => `${col}${newRowNum}`);
+        for (const v of Array.from(cell.getElementsByTagNameNS(NS, 'v'))) cell.removeChild(v);
+        const v = sheetXml.createElementNS(NS, 'v');
+        v.textContent = '';
+        cell.appendChild(v);
+      }
+    }
+
+    for (const col of clearCols) {
+      const cell = Array.from(clone.getElementsByTagNameNS(NS, 'c'))
+        .find(c => c.getAttribute('r') === `${col}${newRowNum}`);
+      if (cell) clearCellContent(cell);
+    }
+    return clone;
+  }
+
+  function addReserveMergeRows(sheetXml, sourceRowNum, newRowStart, count) {
+    const mergeCellsEl = sheetXml.documentElement.getElementsByTagNameNS(NS, 'mergeCells')[0];
+    if (!mergeCellsEl) return;
+    const sourceRefs = Array.from(mergeCellsEl.getElementsByTagNameNS(NS, 'mergeCell'))
+      .map(mc => mc.getAttribute('ref'))
+      .filter(ref => {
+        const nums = (String(ref).match(/\d+/g) || []).map(Number);
+        return nums.length && Math.min(...nums) === sourceRowNum && Math.max(...nums) === sourceRowNum;
+      });
+    for (let i = 0; i < count; i++) {
+      const delta = newRowStart + i - sourceRowNum;
+      for (const ref of sourceRefs) {
+        const shifted = ref.replace(/(\d+)/g, m => String(Number(m) + delta));
+        if (!Array.from(mergeCellsEl.getElementsByTagNameNS(NS, 'mergeCell'))
+          .some(mc => mc.getAttribute('ref') === shifted)) {
+          const mc = sheetXml.createElementNS(NS, 'mergeCell');
+          mc.setAttribute('ref', shifted);
+          mergeCellsEl.appendChild(mc);
+        }
+      }
+    }
+    mergeCellsEl.setAttribute('count', String(mergeCellsEl.getElementsByTagNameNS(NS, 'mergeCell').length));
+  }
+
+  function insertReserveRowsForSheet(sheetXml, items, baseRow, rowsPerItem, clearCols) {
+    const groups = buildVendorReserveGroups(items);
+    let insertedAfter = 0;
+    const insertedByOldIndex = new Map();
+
+    // 由後往前插入，避免前面的原始列號被後續插入影響。
+    for (const group of groups) {
+      const shiftBefore = insertedAfter;
+      const sourceRowNum = baseRow + group.lastItemIndex * rowsPerItem + shiftBefore;
+      const insertStart = sourceRowNum + rowsPerItem;
+      const delta = VENDOR_RESERVE_COUNT * rowsPerItem;
+
+      shiftRowsAndMerges(sheetXml, insertStart, delta);
+      const api = sheetApi(sheetXml);
+      const footerAfter = api.getRow(insertStart + delta);
+      const sourceRow = api.getRow(sourceRowNum);
+      if (!sourceRow || !footerAfter) {
+        throw new Error(`建立廠商備用列失敗：第 ${sourceRowNum} 列`);
+      }
+      const sheetData = api.sheetData;
+
+      if (rowsPerItem === 1) {
+        for (let i = 0; i < VENDOR_RESERVE_COUNT; i++) {
+          const nr = insertStart + i;
+          const clone = cloneReserveRow(sheetXml, sourceRowNum, nr, clearCols);
+          sheetData.insertBefore(clone, footerAfter);
+        }
+        addReserveMergeRows(sheetXml, sourceRowNum, insertStart, VENDOR_RESERVE_COUNT);
+      } else {
+        const sourceRow1 = api.getRow(sourceRowNum);
+        const sourceRow2 = api.getRow(sourceRowNum + 1);
+        if (!sourceRow1 || !sourceRow2) throw new Error(`找不到貨櫃清單來源第 ${sourceRowNum}/${sourceRowNum + 1} 列`);
+        const mergeCellsEl = sheetXml.documentElement.getElementsByTagNameNS(NS, 'mergeCells')[0];
+        const sourceRefs = mergeCellsEl
+          ? Array.from(mergeCellsEl.getElementsByTagNameNS(NS, 'mergeCell')).map(mc => mc.getAttribute('ref')).filter(ref => {
+              const nums = (String(ref).match(/\d+/g) || []).map(Number);
+              return nums.length && Math.min(...nums) >= sourceRowNum && Math.max(...nums) <= sourceRowNum + 1;
+            })
+          : [];
+        for (let i = 0; i < VENDOR_RESERVE_COUNT; i++) {
+          const nr1 = insertStart + i * 2;
+          const nr2 = nr1 + 1;
+          const clone1 = cloneReserveRow(sheetXml, sourceRowNum, nr1, clearCols[0] || []);
+          const clone2 = cloneReserveRow(sheetXml, sourceRowNum + 1, nr2, clearCols[1] || []);
+          sheetData.insertBefore(clone1, footerAfter);
+          sheetData.insertBefore(clone2, footerAfter);
+          if (mergeCellsEl) {
+            const deltaRows = nr1 - sourceRowNum;
+            for (const ref of sourceRefs) {
+              const shifted = ref.replace(/(\d+)/g, m => String(Number(m) + deltaRows));
+              if (!Array.from(mergeCellsEl.getElementsByTagNameNS(NS, 'mergeCell')).some(mc => mc.getAttribute('ref') === shifted)) {
+                const mc = sheetXml.createElementNS(NS, 'mergeCell');
+                mc.setAttribute('ref', shifted);
+                mergeCellsEl.appendChild(mc);
+              }
+            }
+          }
+        }
+        if (mergeCellsEl) mergeCellsEl.setAttribute('count', String(mergeCellsEl.getElementsByTagNameNS(NS, 'mergeCell').length));
+      }
+      insertedAfter += delta;
+      insertedByOldIndex.set(group.lastItemIndex, insertedAfter);
+    }
+    return { groups, totalInsertedRows: insertedAfter };
+  }
+
+  function updateSheetRowReferences(sheetXml, targetSheetName, rowShiftRules, currentSheetName = '') {
+    for (const cell of Array.from(sheetXml.getElementsByTagNameNS(NS, 'c'))) {
+      const f = cell.getElementsByTagNameNS(NS, 'f')[0];
+      if (!f || f.textContent == null) continue;
+      let formula = f.textContent;
+      const escaped = String(targetSheetName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      // 1. 明確指定目標工作表的公式，例如：進口艙單印1份!B16、'貨櫃清單-1份'!J9。
+      const explicitRe = new RegExp(`((?:'${escaped}'|${escaped})!)(\\$?[A-Z]{1,3}\\$?)(\\d+)\\b`, 'g');
+      formula = formula.replace(explicitRe, (m, prefix, col, rowText) => {
+        const oldRow = Number(rowText);
+        const rule = rowShiftRules.find(x => oldRow >= x.fromRow);
+        if (!rule) return m;
+        return `${prefix}${col}${oldRow + rule.delta}`;
+      });
+
+      // 2. 目前工作表自己的相對引用，例如：=T17&"  "&E17...、=SUM(C16:C17)。
+      // 只有正在處理的就是目標工作表時才位移，避免誤改其他工作表的本地公式。
+      if (currentSheetName === targetSheetName) {
+        const localRe = /(?<![A-Z0-9_!'])((?:\$?[A-Z]{1,3}\$?))(\d+)\b/g;
+        formula = formula.replace(localRe, (m, col, rowText) => {
+          const oldRow = Number(rowText);
+          const rule = rowShiftRules.find(x => oldRow >= x.fromRow);
+          if (!rule) return m;
+          return `${col}${oldRow + rule.delta}`;
+        });
+      }
+      f.textContent = formula;
+    }
+  }
+
+  function makeRowShiftRules(items, baseRow, rowsPerItem) {
+    const groups = buildVendorReserveGroups(items).sort((a, b) => a.lastItemIndex - b.lastItemIndex);
+    let cumulative = 0;
+    const rules = [];
+    for (const group of groups) {
+      const insertAfter = baseRow + (group.lastItemIndex + 1) * rowsPerItem - 1;
+      cumulative += VENDOR_RESERVE_COUNT * rowsPerItem;
+      rules.push({ fromRow: insertAfter + 1, delta: cumulative });
+    }
+    return rules;
+  }
+
+  function updateFormulaReferencesForReserveRows(items) {
+    const manifestRules = makeRowShiftRules(items, 16, 1);
+    const t1Rules = makeRowShiftRules(items, 3, 1);
+    const redRules = makeRowShiftRules(items, 22, 1);
+    const appRules = makeRowShiftRules(items, 22, 1);
+    const cargoRules = makeRowShiftRules(items, 9, 2);
+
+    for (const [name, info] of formulaCacheSheets.entries()) {
+      updateSheetRowReferences(info, '進口艙單印1份', manifestRules);
+      updateSheetRowReferences(info, 'T1快遞貨物訊息', t1Rules);
+      updateSheetRowReferences(info, '准單(紅紙)-2份', redRules);
+      updateSheetRowReferences(info, '准單申請-1份 ', appRules);
+      updateSheetRowReferences(info, '貨櫃清單-1份', cargoRules);
+    }
+  }
+
+  // 這個階段需要先把既有動態工作表寫回 ZIP，再由同一批 XML 做備用列處理。
+  zip.file(t1.target, serializer.serializeToString(t1.xml));
+  zip.file(red.target, serializer.serializeToString(red.xml));
+  zip.file(application.target, serializer.serializeToString(application.xml));
+  zip.file(cargo.target, serializer.serializeToString(cargo.xml));
+  zip.file(shipTarget, serializer.serializeToString(shipXml));
+  zip.file(sheetTarget, serializer.serializeToString(sheetXml));
+  zip.file('xl/workbook.xml', serializer.serializeToString(workbookXml));
+  zip.file('xl/_rels/workbook.xml.rels', serializer.serializeToString(relsXml));
+
+  // 重新載入剛才已完成的動態工作表，建立每家廠商的隱藏備用列。
+  const reserveSheetTargets = new Map([
+    ['進口艙單印1份', sheetTarget],
+    ['T1快遞貨物訊息', t1.target],
+    ['准單(紅紙)-2份', red.target],
+    ['准單申請-1份 ', application.target],
+    ['貨櫃清單-1份', cargo.target]
+  ]);
+  const reserveSheetXml = new Map();
+  for (const [name, target] of reserveSheetTargets) {
+    reserveSheetXml.set(name, parser.parseFromString(await zip.file(target).async('text'), 'application/xml'));
+  }
+
+  const reserveManifest = insertReserveRowsForSheet(reserveSheetXml.get('進口艙單印1份'), items, 16, 1, ['A','C','E','I','P']);
+  const reserveT1 = insertReserveRowsForSheet(reserveSheetXml.get('T1快遞貨物訊息'), items, 3, 1, ['B','D','E','K','L']);
+  const reserveRed = insertReserveRowsForSheet(reserveSheetXml.get('准單(紅紙)-2份'), items, 22, 1, ['A','C','F','H','I']);
+  const reserveApp = insertReserveRowsForSheet(reserveSheetXml.get('准單申請-1份 '), items, 22, 1, ['A','C','F','H','I']);
+  const reserveCargo = insertReserveRowsForSheet(
+    reserveSheetXml.get('貨櫃清單-1份'), items, 9, 2,
+    [['B','C','D','E'], ['G']]
+  );
+
+  // 讓後續公式快取同步讀到「加完隱藏列」的最新 XML。
+  for (const [name, target] of reserveSheetTargets) {
+    zip.file(target, serializer.serializeToString(reserveSheetXml.get(name)));
+  }
+
+  // 所有跨工作表公式都要跟著插入的隱藏列同步位移。
+  // 直接以每個工作表的原始資料列範圍建立位移規則，避免既有公式來源錯位。
+  const reserveFormulaSheets = new Map();
+  for (const [name, target] of reserveSheetTargets) {
+    reserveFormulaSheets.set(name, reserveSheetXml.get(name));
+  }
+  for (const [name, info] of reserveFormulaSheets) {
+    // no-op：Map 僅用來統一後續快取處理的來源。
+  }
+
+  // 更新 Print_Area，使備用列也屬於工作表的可列印範圍；因為它們是 hidden，正常列印時不會出現。
+  const totalReserveRecords = buildVendorReserveGroups(items).length * VENDOR_RESERVE_COUNT;
+  const manifestPrintEnd = 19 + Math.max(0, items.length - 1) + totalReserveRecords;
+  const redPrintEndReserve = 29 + Math.max(0, items.length - 1) + totalReserveRecords;
+  const appPrintEndReserve = 33 + Math.max(0, items.length - 1) + totalReserveRecords;
+  const cargoPrintEndReserve = 15 + Math.max(0, items.length - 1) * 2 + totalReserveRecords * 2;
+  for (const dn of Array.from(workbookXml.getElementsByTagNameNS(NS, 'definedName'))) {
+    const name = dn.getAttribute('name');
+    const text = String(dn.textContent || '');
+    if (name === '_xlnm.Print_Area' && text.includes('進口艙單印1份')) dn.textContent = `'進口艙單印1份'!$A$1:$N$${manifestPrintEnd}`;
+    if (name === '_xlnm.Print_Area' && text.includes('准單(紅紙)-2份')) dn.textContent = `'准單(紅紙)-2份'!$A$1:$I$${redPrintEndReserve}`;
+    if (name === '_xlnm.Print_Area' && text.includes('准單申請-1份')) dn.textContent = `'准單申請-1份 '!$A$1:$I$${appPrintEndReserve}`;
+    if (name === '_xlnm.Print_Area' && text.includes('貨櫃清單-1份')) dn.textContent = `'貨櫃清單-1份'!$A$1:$J$${cargoPrintEndReserve}`;
+  }
+
+  // T1 篩選範圍一併包含隱藏備用列，之後解除隱藏即可直接填資料。
+  for (const dn of Array.from(workbookXml.getElementsByTagNameNS(NS, 'definedName'))) {
+    if (dn.getAttribute('name') === '_xlnm._FilterDatabase' && Number(dn.getAttribute('localSheetId')) === 2) {
+      dn.textContent = `T1快遞貨物訊息!$A$2:$A$${2 + items.length + totalReserveRecords}`;
+    }
+  }
+
+  // ── 運送單：每一家廠商另外預留 10 張隱藏運送單 ──
+  // 既有運送第1筆、第2筆……等實際資料頁完全保留；只額外複製 10 張該廠商的運送單母版，
+  // 並將它們設為 hidden。解除隱藏後，使用者只需填入對應的新櫃資料。
+  const transportReserveGroups = buildVendorReserveGroups(items);
+  let transportMaxSheetId = 0;
+  for (const s of Array.from(sheetsEl.getElementsByTagNameNS(NS, 'sheet'))) {
+    transportMaxSheetId = Math.max(transportMaxSheetId, Number(s.getAttribute('sheetId')) || 0);
+  }
+  let transportMaxRidNum = 0;
+  for (const r of Array.from(relsXml.getElementsByTagName('Relationship'))) {
+    const m = String(r.getAttribute('Id') || '').match(/^rId(\d+)$/);
+    if (m) transportMaxRidNum = Math.max(transportMaxRidNum, Number(m[1]));
+  }
+  let transportSheetFileMax = 0;
+  for (const rel of Array.from(relsXml.getElementsByTagName('Relationship'))) {
+    const m = String(rel.getAttribute('Target') || '').match(/worksheets\/sheet(\d+)\.xml$/);
+    if (m) transportSheetFileMax = Math.max(transportSheetFileMax, Number(m[1]));
+  }
+
+  function shiftedDataRow(oldRow, rules) {
+    let delta = 0;
+    for (const rule of rules) {
+      if (oldRow >= rule.fromRow) delta = rule.delta;
+      else break;
+    }
+    return oldRow + delta;
+  }
+
+  const manifestReserveRules = makeRowShiftRules(items, 16, 1);
+  const cargoReserveRules = makeRowShiftRules(items, 9, 2);
+
+  if (ctXmlTransport) {
+    for (const group of transportReserveGroups) {
+      const sourceItemIndex = group.lastItemIndex;
+      // 一律使用 Template 的「運送第1筆」原始母版，因為它的公式基準固定為艙單16／貨櫃清單9，
+      // 這樣新增的隱藏運送單才能正確改指向各自的隱藏備用列。
+
+      // 這一組新增的 10 張運送單，分別對應該廠商的 10 個隱藏艙單／貨櫃清單備用列。
+      // 隱藏列的位置是在該廠商最後一筆原始資料後，因此可由「最後一筆原始 index」換算。
+      const groupStartOldIndex = group.lastItemIndex + 1;
+      const groupStartManifestRow = shiftedDataRow(16 + groupStartOldIndex, manifestReserveRules);
+      const groupStartCargoRow = shiftedDataRow(9 + groupStartOldIndex * 2, cargoReserveRules);
+
+      for (let reserveIndex = 0; reserveIndex < VENDOR_RESERVE_COUNT; reserveIndex++) {
+        const newSheetNumber = items.length + 1 + (
+          transportReserveGroups.slice(0, transportReserveGroups.indexOf(group)).length * VENDOR_RESERVE_COUNT
+        ) + reserveIndex;
+        const newName = `運送第${newSheetNumber}筆`;
+        transportMaxSheetId++;
+        transportMaxRidNum++;
+        transportSheetFileMax++;
+        const newSheetId = transportSheetFileMax;
+        const newRid = `rId${transportMaxRidNum}`;
+        const newTarget = `xl/worksheets/sheet${newSheetId}.xml`;
+        const newLocalSheetId = Array.from(sheetsEl.getElementsByTagNameNS(NS, 'sheet')).length;
+
+        const newXml = sourceTransportXml.cloneNode(true);
+        const root = newXml.documentElement;
+        const manifestRow = groupStartManifestRow + reserveIndex;
+        const cargoRow = groupStartCargoRow + reserveIndex * 2;
+
+        for (const cell of Array.from(root.getElementsByTagNameNS(NS, 'c'))) {
+          const f = cell.getElementsByTagNameNS(NS, 'f')[0];
+          if (!f || f.textContent == null) continue;
+          let formula = f.textContent;
+          formula = formula.replace(/(進口艙單印1份![A-Z]{1,3})16\b/g, `$1${manifestRow}`);
+          formula = formula.replace(/('貨櫃清單-1份'![A-Z]{1,3})9\b/g, `$1${cargoRow}`);
+          f.textContent = formula;
+          for (const v of Array.from(cell.getElementsByTagNameNS(NS, 'v'))) cell.removeChild(v);
+          const v = newXml.createElementNS(NS, 'v');
+          v.textContent = '';
+          cell.appendChild(v);
+        }
+        const dimension = root.getElementsByTagNameNS(NS, 'dimension')[0];
+        if (dimension) dimension.setAttribute('ref', 'A1:P41');
+
+        // 預設隱藏這 10 張備用運送單。
+        const sheetNode = workbookXml.createElementNS(NS, 'sheet');
+        sheetNode.setAttribute('name', newName);
+        sheetNode.setAttribute('sheetId', String(transportMaxSheetId));
+        sheetNode.setAttribute('state', 'hidden');
+        sheetNode.setAttributeNS(REL_NS, 'r:id', newRid);
+        sheetsEl.appendChild(sheetNode);
+
+        zip.file(newTarget, serializer.serializeToString(newXml));
+
+        const sourceRelPath = `xl/worksheets/_rels/${sourceTransport.target.split('/').pop()}.rels`;
+        const newRelPath = `xl/worksheets/_rels/sheet${newSheetId}.xml.rels`;
+        const sourceRelFile = zip.file(sourceRelPath);
+        if (sourceRelFile) zip.file(newRelPath, await sourceRelFile.async('text'));
+
+        const relNode = relsXml.createElementNS('http://schemas.openxmlformats.org/package/2006/relationships', 'Relationship');
+        relNode.setAttribute('Id', newRid);
+        relNode.setAttribute('Type', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet');
+        relNode.setAttribute('Target', `worksheets/sheet${newSheetId}.xml`);
+        relsXml.documentElement.appendChild(relNode);
+
+        const definedNamesEl = workbookXml.getElementsByTagNameNS(NS, 'definedNames')[0]
+          || workbookXml.appendChild(workbookXml.createElementNS(NS, 'definedNames'));
+        const printName = workbookXml.createElementNS(NS, 'definedName');
+        printName.setAttribute('name', '_xlnm.Print_Area');
+        printName.setAttribute('localSheetId', String(newLocalSheetId));
+        printName.textContent = `'${newName}'!$A$1:$N$41`;
+        definedNamesEl.appendChild(printName);
+
+        const override = ctXmlTransport.createElementNS('http://schemas.openxmlformats.org/package/2006/content-types', 'Override');
+        override.setAttribute('PartName', `/xl/worksheets/sheet${newSheetId}.xml`);
+        override.setAttribute('ContentType', 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml');
+        ctXmlTransport.documentElement.appendChild(override);
+      }
+    }
+  }
+
+  // 重新寫入 XML；公式快取同步階段會在後面再讀一次最新內容。
+  zip.file(sheetTarget, serializer.serializeToString(reserveSheetXml.get('進口艙單印1份')));
+  zip.file(t1.target, serializer.serializeToString(reserveSheetXml.get('T1快遞貨物訊息')));
+  zip.file(red.target, serializer.serializeToString(reserveSheetXml.get('准單(紅紙)-2份')));
+  zip.file(application.target, serializer.serializeToString(reserveSheetXml.get('准單申請-1份 ')));
+  zip.file(cargo.target, serializer.serializeToString(reserveSheetXml.get('貨櫃清單-1份')));
+  zip.file('xl/workbook.xml', serializer.serializeToString(workbookXml));
+  zip.file('xl/_rels/workbook.xml.rels', serializer.serializeToString(relsXml));
+
   // 寫回所有動態工作表；運送單第4筆起已在上方建立。
   zip.file(t1.target, serializer.serializeToString(t1.xml));
   zip.file(red.target, serializer.serializeToString(red.xml));
@@ -2700,7 +3131,23 @@ async function buildManifestXlsx(loc) {
   }
 
   const allSheets = await loadAllWorksheetXml();
-  for (const [name, info] of allSheets) formulaCacheSheets.set(name, info.xml);
+
+  // 備用列插入後，所有原本指向艙單／准單／貨櫃清單的公式都要跟著實際列號位移。
+  // 這裡使用「插入點以後累計增加的列數」處理，確保既有工作表之間的公式來源不錯位。
+  const manifestRules = makeRowShiftRules(items, 16, 1);
+  const t1Rules = makeRowShiftRules(items, 3, 1);
+  const redRules = makeRowShiftRules(items, 22, 1);
+  const appRules = makeRowShiftRules(items, 22, 1);
+  const cargoRules = makeRowShiftRules(items, 9, 2);
+  for (const [name, info] of allSheets) {
+    updateSheetRowReferences(info.xml, '進口艙單印1份', manifestRules, name);
+    updateSheetRowReferences(info.xml, 'T1快遞貨物訊息', t1Rules, name);
+    updateSheetRowReferences(info.xml, '准單(紅紙)-2份', redRules, name);
+    updateSheetRowReferences(info.xml, '准單申請-1份 ', appRules, name);
+    updateSheetRowReferences(info.xml, '貨櫃清單-1份', cargoRules, name);
+    zip.file(info.target, serializer.serializeToString(info.xml));
+    formulaCacheSheets.set(name, info.xml);
+  }
 
   function readCellValue(sheetName, ref, stack) {
     const key = `${sheetName}!${ref}`;
