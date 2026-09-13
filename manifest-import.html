@@ -2739,7 +2739,15 @@ async function buildManifestXlsx(loc) {
 
       const api = sheetApi(sheetXml);
       const sheetData = api.sheetData;
-      const footerAfter = api.getRow(insertStart + delta);
+
+      // 插入點後的固定內容不一定剛好落在 insertStart + delta。
+      // 例如「准單(紅紙)」原本第23列起就是固定內容，但多筆資料先把固定區往下推，
+      // 再建立廠商備用列後，中間可能還存在其他資料列或空白列。
+      // 因此不能用 getRow(insertStart + delta) 精準猜固定內容位置，
+      // 改成尋找「插入後第一個 >= insertStart + delta 的既有 row」作為插入錨點。
+      const footerAfter = Array.from(sheetData.getElementsByTagNameNS(NS, 'row'))
+        .filter(row => row.parentNode === sheetData && Number(row.getAttribute('r')) >= insertStart + delta)
+        .sort((a, b) => Number(a.getAttribute('r')) - Number(b.getAttribute('r')))[0];
       if (!footerAfter) throw new Error(`建立廠商備用列失敗：第 ${insertStart} 列之後找不到固定內容`);
 
       const reserveRows = [];
