@@ -2941,11 +2941,14 @@ async function buildManifestXlsx(loc) {
 
   const reserveManifest = insertVendorReserveRows(reserveXml.get('進口艙單印1份'), items, 16, 1, ['A','B','C','E','I','P']);
   const reserveT1 = insertVendorReserveRows(reserveXml.get('T1快遞貨物訊息'), items, 3, 1, ['A','B','D','K']);
-  const reserveRed = insertVendorReserveRows(reserveXml.get('准單(紅紙)-2份'), items, 22, 1, ['A','C','F','H','I']);
-  const reserveApp = insertVendorReserveRows(reserveXml.get('准單申請-1份 '), items, 22, 1, ['A','C','F','H','I']);
+  // 准單、准單申請、貨櫃清單的備用資料列，公式欄位必須保留，
+  // 後續再依每一組隱藏列的實際位置順著更新來源。
+  // 不改動艙單既有輸入欄位的留白規則，也不改動已確認的運送單邏輯。
+  const reserveRed = insertVendorReserveRows(reserveXml.get('准單(紅紙)-2份'), items, 22, 1, []);
+  const reserveApp = insertVendorReserveRows(reserveXml.get('准單申請-1份 '), items, 22, 1, []);
   const reserveCargo = insertVendorReserveRows(
     reserveXml.get('貨櫃清單-1份'), items, 9, 2,
-    [['A','B','C','D','E','F','H'], ['G']]
+    [[], []]
   );
 
   // 讓既有跨工作表公式跟著真正插入的列號走；隱藏備用列稍後會重新指定自己的來源。
