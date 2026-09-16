@@ -1664,7 +1664,12 @@ async function buildManifestXlsx(loc) {
       if (!row) throw new Error(`找不到第 ${p.row} 列`);
       const cell=ensureCell(row,ref);
       clearChildren(cell);
-      const f=sheetXml.createElementNS(NS,'f'); f.textContent=formula; cell.appendChild(f);
+      // OOXML 的 <f> 內容不能再帶最前面的「=」；
+      // 既有程式呼叫 setFormula 時多數會傳入 Excel 習慣的 =公式，
+      // 這裡統一只在 XML 層去掉最前面的 =，避免產生 ==T16... 造成 Excel 修復。
+      const f=sheetXml.createElementNS(NS,'f');
+      f.textContent=String(formula ?? '').replace(/^=/, '');
+      cell.appendChild(f);
       const v=sheetXml.createElementNS(NS,'v');
       if (cachedValue !== null && cachedValue !== undefined) v.textContent=String(cachedValue);
       cell.appendChild(v);
