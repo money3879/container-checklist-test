@@ -2539,8 +2539,29 @@ async function buildManifestXlsx(loc) {
   const finalAppRows = buildFinalItemRows(22, 1);
   const finalCargoRows = buildFinalItemRows(9, 2);
 
+  // 運送單編號依「廠商群組」連續排列：
+  // 同一家廠商的可見運送單先連續，再接該廠商的 10 張隱藏備用運送單，
+  // 然後才進入下一家廠商。
+  // 例如 A 廠商 3 筆、B 廠商 2 筆：
+  // A：1、2、3（可見）+ 4~13（隱藏）
+  // B：14、15（可見）+ 16~25（隱藏）
   const transportTemplateCount = 1;
   const transportExtra = Math.max(0, items.length - transportTemplateCount);
+
+  // 建立「廠商群組 → 實際 item index」的順序。
+  // 這樣即使匯入資料中同一家廠商的資料不是緊鄰，運送單仍會依廠商群組連續排列。
+  const transportVendorGroups = getVendorGroups(items).map(group => ({
+    ...group,
+    itemIndexes: items
+      .map((it, index) => ({ it, index }))
+      .filter(x => reserveVendorKey(x.it) === group.key)
+      .map(x => x.index)
+  }));
+  const transportVisibleOrder = transportVendorGroups.flatMap(group => group.itemIndexes);
+  const transportVisibleNumberByItemIndex = new Map(
+    transportVisibleOrder.map((itemIndex, orderIndex) => [itemIndex, orderIndex + 1])
+  );
+
   const sourceTransport = getWorksheetSheetInfo('運送第1筆');
   const sheetsEl = workbookXml.getElementsByTagNameNS(NS, 'sheets')[0];
   if (!sheetsEl) throw new Error('workbook.xml 找不到 sheets');
@@ -2569,7 +2590,10 @@ async function buildManifestXlsx(loc) {
 
   for (let i = 0; i < transportExtra; i++) {
     const itemIndex = transportTemplateCount + i; // 0-based，第2筆開始
-    const sheetNumber = itemIndex * (VENDOR_RESERVE_COUNT + 1) + 1;
+    // 可見運送單依「廠商群組」連續編號。
+    // 備用 10 張不在這裡插號，會在第六階段依廠商群組統一建立。
+    const sheetNumber = transportVisibleNumberByItemIndex.get(itemIndex);
+    if (!sheetNumber) throw new Error(`找不到運送單編號：第 ${itemIndex + 1} 筆`);
     const newName = `運送第${sheetNumber}筆`;
     const newSheetId = ++maxSheetId;
     const newRid = `rId${++maxRidNum}`;
@@ -3083,25 +3107,25 @@ async function buildManifestXlsx(loc) {
     return finalCargoRows[itemIndex] ?? (9 + itemIndex * 2);
   }
 
-  function visibleTransportItemIndex(sheetNumber) {
-    const n = Number(sheetNumber);
-    if (n < 1 || (n - 1) % (VENDOR_RESERVE_COUNT + 1) !== 0) return -1;
-    return Math.floor((n - 1) / (VENDOR_RESERVE_COUNT + 1));
-  }
-
-  // 找出 workbook 內目前已存在的運送單工作表。Template 的第1筆與前面第五階段
-  // 動態複製出的第2筆、第3筆……都屬於「既有運送單」，只更新它們引用的實際資料列。
+  // 既有可見運送單依「運送第1筆、運送第2筆……」的實際連續順序，
+  // 對應 items 的 0-based index。這裡不能再使用「每筆 + 10 張備用」的跳號規則，
+  // 因為備用單是以廠商群組為單位配置。
   const existingTransportSheets = Array.from(sheetsEl.getElementsByTagNameNS(NS, 'sheet'))
     .map(sheet => ({
       name: String(sheet.getAttribute('name') || ''),
       rid: sheet.getAttributeNS(REL_NS, 'id') || sheet.getAttribute('r:id') || ''
     }))
-    .filter(x => /^運送第\d+筆$/.test(x.name));
+    .filter(x => /^運送第\d+筆$/.test(x.name))
+    .sort((a, b) => {
+      const na = Number(a.name.match(/\d+/)[0]);
+      const nb = Number(b.name.match(/\d+/)[0]);
+      return na - nb;
+    });
 
   for (const info of existingTransportSheets) {
-    const m = info.name.match(/^運送第(\d+)筆$/);
-    const itemIndex = visibleTransportItemIndex(Number(m[1]));
-    if (itemIndex < 0 || itemIndex >= items.length) continue;
+    const sheetNumber = Number(info.name.match(/\d+/)[0]);
+    const itemIndex = transportVisibleOrder[sheetNumber - 1];
+    if (itemIndex == null || itemIndex < 0 || itemIndex >= items.length) continue;
 
     const rel = Array.from(relsXml.getElementsByTagName('Relationship'))
       .find(r => String(r.getAttribute('Id') || '') === info.rid);
@@ -3120,8 +3144,12 @@ async function buildManifestXlsx(loc) {
       const f = cell.getElementsByTagNameNS(NS, 'f')[0];
       if (!f || f.textContent == null) continue;
       let formula = f.textContent;
-      formula = formula.replace(/(進口艙單印1份![A-Z]{1,3})\d+\b/g, `$1${manifestRow}`);
-      formula = formula.replace(/('貨櫃清單-1份'![A-Z]{1,3})\d+\b/g, `$1${cargoRow}`);
+
+      // 只更新 Template 的「資料列」參照：艙單第16列、貨櫃清單第9列。
+      // F5 的 =進口艙單印1份!L3 是船掛固定來源，絕對不能被改成 L16。
+      formula = formula.replace(/(進口艙單印1份![A-Z]{1,3})16\b/g, `$1${manifestRow}`);
+      formula = formula.replace(/('貨櫃清單-1份'![A-Z]{1,3})9\b/g, `$1${cargoRow}`);
+
       f.textContent = formula;
       for (const v of Array.from(cell.getElementsByTagNameNS(NS, 'v'))) cell.removeChild(v);
       const v = xml.createElementNS(NS, 'v');
@@ -3134,7 +3162,7 @@ async function buildManifestXlsx(loc) {
   // ── 運送單：每一家廠商另外預留 10 張隱藏運送單 ──
   // 原本的「運送第1筆～第N筆」完全保留；這裡只在後面追加每家廠商的 10 張備用單。
   // 備用運送單指向該廠商對應的隱藏艙單／貨櫃清單資料列，解除隱藏後即可使用。
-  const transportReserveGroups = getVendorGroups(items);
+  const transportReserveGroups = transportVendorGroups;
   let reserveMaxSheetId = 0;
   let reserveMaxRidNum = 0;
   let reserveMaxSheetFileNum = 0;
@@ -3151,18 +3179,23 @@ async function buildManifestXlsx(loc) {
   }
 
   if (ctXmlTransport) {
-    for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
-      const group = transportReserveGroups.find(g => g.lastItemIndex === itemIndex)
-        || transportReserveGroups.find(g => g.lastItemIndex >= itemIndex);
-      const reserveOwnerIndex = group ? group.lastItemIndex : itemIndex;
-      const manifestRows = reserveManifest.reserveRowsByItemIndex.get(reserveOwnerIndex) || [];
-      const cargoRows = reserveCargo.reserveRowsByItemIndex.get(reserveOwnerIndex) || [];
+    // 每個廠商群組只建立一次 10 張隱藏運送單。
+    // reserveOwnerIndex 是該廠商最後一筆可見資料的 index，對應同一組的隱藏艙單／貨櫃清單。
+    let transportNumberCursor = 1;
+
+    for (const group of transportReserveGroups) {
+      const groupItemIndexes = group.itemIndexes;
+      const groupVisibleCount = groupItemIndexes.length;
+      const reserveStartNumber = transportNumberCursor + groupVisibleCount;
+      const manifestRows = reserveManifest.reserveRowsByItemIndex.get(group.lastItemIndex) || [];
+      const cargoRows = reserveCargo.reserveRowsByItemIndex.get(group.lastItemIndex) || [];
+
       for (let i = 0; i < VENDOR_RESERVE_COUNT; i++) {
         const mr = manifestRows[i];
         const cr = cargoRows[i];
         if (!mr || !cr) continue;
 
-        const newSheetNumber = itemIndex * (VENDOR_RESERVE_COUNT + 1) + 2 + i;
+        const newSheetNumber = reserveStartNumber + i;
         const newName = `運送第${newSheetNumber}筆`;
         const newSheetId = ++reserveMaxSheetId;
         const newRid = `rId${++reserveMaxRidNum}`;
@@ -3175,8 +3208,12 @@ async function buildManifestXlsx(loc) {
           const f = cell.getElementsByTagNameNS(NS, 'f')[0];
           if (!f || f.textContent == null) continue;
           let formula = f.textContent;
+
+          // 隱藏運送單的來源固定是 Template 第1筆的資料列 16 / 9。
+          // L3 是船掛固定來源，不能被當成資料列參照。
           formula = formula.replace(/(進口艙單印1份![A-Z]{1,3})16\b/g, `$1${mr}`);
           formula = formula.replace(/('貨櫃清單-1份'![A-Z]{1,3})9\b/g, `$1${cr[0]}`);
+
           f.textContent = formula;
           for (const v of Array.from(cell.getElementsByTagNameNS(NS, 'v'))) cell.removeChild(v);
           const v = newXml.createElementNS(NS, 'v');
@@ -3230,11 +3267,14 @@ async function buildManifestXlsx(loc) {
         );
         ctXmlTransport.documentElement.appendChild(override);
       }
+
+      // 下一家廠商從「本家可見數量 + 10 張備用」之後接續編號。
+      transportNumberCursor += groupVisibleCount + VENDOR_RESERVE_COUNT;
     }
   }
 
-  // 運送單建立完成後，依工作表編號重新排列，讓每筆資料的 10 張隱藏單緊接在該筆可見運送單後。
-  // 3 筆資料時：1(可見)、2~11(隱藏)、12(可見)、13~22(隱藏)、23(可見)、24~33(隱藏)。
+  // 運送單建立完成後，依工作表編號重新排列，維持「廠商群組」的連續順序。
+  // 例如 A=3 筆、B=2 筆：A 的 1~3 可見、4~13 隱藏；B 的 14~15 可見、16~25 隱藏。
   const transportSheetNodes = Array.from(sheetsEl.getElementsByTagNameNS(NS, 'sheet'))
     .filter(s => /^運送第\d+筆$/.test(String(s.getAttribute('name') || '')))
     .sort((a, b) => {
