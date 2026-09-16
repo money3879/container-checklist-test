@@ -1668,7 +1668,7 @@ async function buildManifestXlsx(loc) {
       // 既有程式呼叫 setFormula 時多數會傳入 Excel 習慣的 =公式，
       // 這裡統一只在 XML 層去掉最前面的 =，避免產生 ==T16... 造成 Excel 修復。
       const f=sheetXml.createElementNS(NS,'f');
-      f.textContent=String(formula ?? '').replace(/^=/, '');
+      f.textContent=String(formula ?? '').replace(/^=+/, '');
       cell.appendChild(f);
       const v=sheetXml.createElementNS(NS,'v');
       if (cachedValue !== null && cachedValue !== undefined) v.textContent=String(cachedValue);
@@ -3126,6 +3126,15 @@ async function buildManifestXlsx(loc) {
       throw new Error(`公式同步失敗：${cellRef}
 預期：=${expectedFormula}
 實際：=${actual || '(無公式)'}`);
+    }
+  }
+
+  // 公式最終正規化：OOXML 的 <f> 內容不可帶開頭「=」，
+  // 若範本或前面複製／位移流程意外留下「=」甚至「==」，
+  // 在正式公式檢查前統一去除所有前導等號，避免預覽／匯出被錯誤公式卡住。
+  for (const sheetXml of reserveXml.values()) {
+    for (const f of Array.from(sheetXml.getElementsByTagNameNS(NS, 'f'))) {
+      f.textContent = String(f.textContent || '').replace(/^=+/, '');
     }
   }
 
