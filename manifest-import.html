@@ -2558,9 +2558,19 @@ async function buildManifestXlsx(loc) {
       .map(x => x.index)
   }));
   const transportVisibleOrder = transportVendorGroups.flatMap(group => group.itemIndexes);
-  const transportVisibleNumberByItemIndex = new Map(
-    transportVisibleOrder.map((itemIndex, orderIndex) => [itemIndex, orderIndex + 1])
-  );
+
+  // 可見運送單編號不是單純的 itemIndex + 1。
+  // 每一家廠商都要先放「本廠商的可見運送單」，再保留 10 張隱藏備用單，
+  // 下一家廠商才從「上一家可見數量 + 10」之後繼續編號。
+  // 例如 A=3 筆、B=2 筆：A 可見 1~3、備用 4~13；B 可見 14~15、備用 16~25。
+  const transportVisibleNumberByItemIndex = new Map();
+  let visibleTransportCursor = 1;
+  for (const group of transportVendorGroups) {
+    for (const itemIndex of group.itemIndexes) {
+      transportVisibleNumberByItemIndex.set(itemIndex, visibleTransportCursor++);
+    }
+    visibleTransportCursor += VENDOR_RESERVE_COUNT;
+  }
 
   const sourceTransport = getWorksheetSheetInfo('運送第1筆');
   const sheetsEl = workbookXml.getElementsByTagNameNS(NS, 'sheets')[0];
@@ -3096,6 +3106,64 @@ async function buildManifestXlsx(loc) {
     finalCargoApi.setFormula(`G${r2}`, `=進口艙單印1份!I${mr}`, '');
   }
 
+  // 最終公式檢查：所有正式資料列在備用列插入後，都必須指向「最終實際列號」。
+  // 這裡只檢查本次動態展開涉及的公式，不改任何其他 Template 公式。
+  // 若未來修改插入邏輯造成列號不同，直接在預覽階段報錯，避免產生錯誤 Excel。
+  function assertFormula(sheetXml, cellRef, expected) {
+    const api = sheetApi(sheetXml);
+    const p = splitRef(cellRef);
+    const row = api.getRow(p.row);
+    const cell = row && Array.from(row.getElementsByTagNameNS(NS, 'c')).find(c => c.getAttribute('r') === cellRef);
+    const f = cell && cell.getElementsByTagNameNS(NS, 'f')[0];
+    const actual = f ? String(f.textContent || '') : '';
+    const expectedFormula = String(expected).replace(/^=/, '');
+    if (actual !== expectedFormula) {
+      throw new Error(`公式同步失敗：${cellRef}
+預期：=${expectedFormula}
+實際：=${actual || '(無公式)'}`);
+    }
+  }
+
+  const finalAppXml = reserveXml.get('准單申請-1份 ');
+  const finalCargoXml = reserveXml.get('貨櫃清單-1份');
+
+  for (let i = 0; i < items.length; i++) {
+    const mr = finalManifestRows[i];
+    const tr = finalT1Rows[i];
+    const rr = finalRedRows[i];
+    const ar = finalAppRows[i];
+    const cr = finalCargoRows[i];
+
+    assertFormula(finalManifestXml, `F${mr}`, `=T${mr}&"  "&E${mr}&"/"&U${mr}&"/"&V${mr}&"/"&P${mr}`);
+    assertFormula(finalT1Xml, `A${tr}`, `=進口艙單印1份!B${mr}`);
+    assertFormula(finalT1Xml, `B${tr}`, `=進口艙單印1份!A${mr}`);
+    assertFormula(finalT1Xml, `D${tr}`, `=進口艙單印1份!E${mr}`);
+    assertFormula(finalT1Xml, `E${tr}`, `='貨櫃清單-1份'!J${cr}`);
+    assertFormula(finalT1Xml, `J${tr}`, `=IF(進口艙單印1份!U${mr}="45G1","40HQ","")`);
+    assertFormula(finalT1Xml, `K${tr}`, `=進口艙單印1份!P${mr}`);
+
+    assertFormula(reserveXml.get('准單(紅紙)-2份'), `A${rr}`, `=進口艙單印1份!B${mr}`);
+    assertFormula(reserveXml.get('准單(紅紙)-2份'), `C${rr}`, `=進口艙單印1份!T${mr}`);
+    assertFormula(reserveXml.get('准單(紅紙)-2份'), `F${rr}`, `=進口艙單印1份!C${mr}&進口艙單印1份!D${mr}`);
+    assertFormula(reserveXml.get('准單(紅紙)-2份'), `H${rr}`, `=進口艙單印1份!I${mr}`);
+    assertFormula(reserveXml.get('准單(紅紙)-2份'), `I${rr}`, `=進口艙單印1份!E${mr}`);
+
+    assertFormula(finalAppXml, `A${ar}`, `='准單(紅紙)-2份'!A${rr}:B${rr}`);
+    assertFormula(finalAppXml, `C${ar}`, `='准單(紅紙)-2份'!C${rr}:E${rr}`);
+    assertFormula(finalAppXml, `F${ar}`, `='准單(紅紙)-2份'!F${rr}:H${rr}`);
+    assertFormula(finalAppXml, `H${ar}`, `='准單(紅紙)-2份'!H${rr}`);
+    assertFormula(finalAppXml, `I${ar}`, `='准單(紅紙)-2份'!I${rr}:J${rr}`);
+
+    assertFormula(finalCargoXml, `B${cr}`, `=進口艙單印1份!E${mr}`);
+    assertFormula(finalCargoXml, `C${cr}`, `=進口艙單印1份!P${mr}`);
+    assertFormula(finalCargoXml, `D${cr}`, `=進口艙單印1份!B${mr}`);
+    assertFormula(finalCargoXml, `E${cr}`, `=進口艙單印1份!C${mr}`);
+    assertFormula(finalCargoXml, `F${cr}`, `=進口艙單印1份!D${mr}`);
+    assertFormula(finalCargoXml, `G${cr}`, `=B${cr}`);
+    assertFormula(finalCargoXml, `H${cr}`, `=進口艙單印1份!U${mr}`);
+    assertFormula(finalCargoXml, `G${cr + 1}`, `=進口艙單印1份!I${mr}`);
+  }
+
   // 原本已存在的「運送第1筆～第N筆」也要跟著艙單／貨櫃清單的實際最終列號更新。
   // 廠商備用列插入後，原始第2、3筆等資料列可能已被往下推；如果只修改新增的隱藏運送單，
   // 原本運送單就會繼續指向舊的第16／17／18列。這裡只處理既有運送單的跨工作表公式，不改運送單 Template 本身。
@@ -3122,9 +3190,13 @@ async function buildManifestXlsx(loc) {
       return na - nb;
     });
 
+  const transportItemIndexByVisibleNumber = new Map(
+    Array.from(transportVisibleNumberByItemIndex.entries()).map(([itemIndex, sheetNumber]) => [sheetNumber, itemIndex])
+  );
+
   for (const info of existingTransportSheets) {
     const sheetNumber = Number(info.name.match(/\d+/)[0]);
-    const itemIndex = transportVisibleOrder[sheetNumber - 1];
+    const itemIndex = transportItemIndexByVisibleNumber.get(sheetNumber);
     if (itemIndex == null || itemIndex < 0 || itemIndex >= items.length) continue;
 
     const rel = Array.from(relsXml.getElementsByTagName('Relationship'))
