@@ -3042,6 +3042,25 @@ async function buildManifestXlsx(loc) {
     }
   }
 
+  // 艙單隱藏備用列：每一家收貨人的第 1 筆隱藏列，必須緊接在該收貨人最後一筆實際資料列之後，
+  // 後續 9 筆再依序往下。這裡只重新設定「艙單」自己的 F 欄公式，
+  // 不碰 T1、准單、准單申請、貨櫃清單及運送單。
+  // 例如 A 有 3 筆 → 實際資料為 16~18，隱藏列為 19~28；
+  // B 有 2 筆 → 在 A 的 10 筆備用列之後，實際資料為 29~30，隱藏列為 31~40。
+  // 公式一律以「隱藏列自己的 row」為來源，避免仍固定指向 Template 的第16列。
+  for (const group of getVendorGroups(items)) {
+    const manifestRows = reserveManifest.reserveRowsByItemIndex.get(group.lastItemIndex) || [];
+    for (const mr of manifestRows) {
+      if (!mr) continue;
+      const manifestApi = sheetApi(reserveXml.get('進口艙單印1份'));
+      manifestApi.setFormula(
+        `F${mr}`,
+        `=T${mr}&"  "&E${mr}&"/"&U${mr}&"/"&V${mr}&"/"&P${mr}`,
+        ''
+      );
+    }
+  }
+
   // ══ 第六階段公式最終同步 ══
   // 備用列插入後，所有「原始第 N 筆」的實際 row 可能已經因前面廠商的
   // 10 筆隱藏列而往下移。這裡不再依賴前面多次 shift 的中間結果，
