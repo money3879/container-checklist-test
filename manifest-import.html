@@ -2333,7 +2333,7 @@ async function buildManifestXlsx(loc) {
     application.api.setFormula(`C${r}`, `='准單(紅紙)-2份'!C${redRow}:E${redRow}`, '');
     application.api.setFormula(`F${r}`, `='准單(紅紙)-2份'!F${redRow}:H${redRow}`, '');
     application.api.setFormula(`H${r}`, `='准單(紅紙)-2份'!H${redRow}`, '');
-    application.api.setFormula(`I${r}`, `='准單(紅紙)-2份'!I${redRow}:J${redRow}`, '');
+    application.api.setFormula(`I${r}`, `='准單(紅紙)-2份'!I${redRow}`, '');
   }
 
 
@@ -3113,6 +3113,26 @@ async function buildManifestXlsx(loc) {
     }
   }
 
+  // 准單申請隱藏備用列最終同步：每一組隱藏列一對一對應同組隱藏紅紙列。
+  // I 欄依最新 Template 已改為只抓紅紙 I 欄，不再使用 I:J 跨欄引用。
+  const hiddenAppXml = reserveXml.get('准單申請-1份 ');
+  const hiddenAppApi = sheetApi(hiddenAppXml);
+  for (const group of getVendorGroups(items)) {
+    const idx = group.lastItemIndex;
+    const appRows = reserveApp.reserveRowsByItemIndex.get(idx) || [];
+    const redRows = reserveRed.reserveRowsByItemIndex.get(idx) || [];
+    for (let i = 0; i < VENDOR_RESERVE_COUNT; i++) {
+      const ar = appRows[i];
+      const rr = redRows[i];
+      if (!ar || !rr) continue;
+      hiddenAppApi.setFormula(`A${ar}`, `='准單(紅紙)-2份'!A${rr}:B${rr}`, '');
+      hiddenAppApi.setFormula(`C${ar}`, `='准單(紅紙)-2份'!C${rr}:E${rr}`, '');
+      hiddenAppApi.setFormula(`F${ar}`, `='准單(紅紙)-2份'!F${rr}:H${rr}`, '');
+      hiddenAppApi.setFormula(`H${ar}`, `='准單(紅紙)-2份'!H${rr}`, '');
+      hiddenAppApi.setFormula(`I${ar}`, `='准單(紅紙)-2份'!I${rr}`, '');
+    }
+  }
+
   // ══ 第六階段公式最終同步 ══
   // 備用列插入後，所有「原始第 N 筆」的實際 row 可能已經因前面廠商的
   // 10 筆隱藏列而往下移。這裡不再依賴前面多次 shift 的中間結果，
@@ -3166,7 +3186,7 @@ async function buildManifestXlsx(loc) {
     finalAppApi.setFormula(`C${r}`, `='准單(紅紙)-2份'!C${rr}:E${rr}`, '');
     finalAppApi.setFormula(`F${r}`, `='准單(紅紙)-2份'!F${rr}:H${rr}`, '');
     finalAppApi.setFormula(`H${r}`, `='准單(紅紙)-2份'!H${rr}`, '');
-    finalAppApi.setFormula(`I${r}`, `='准單(紅紙)-2份'!I${rr}:J${rr}`, '');
+    finalAppApi.setFormula(`I${r}`, `='准單(紅紙)-2份'!I${rr}`, '');
   }
 
   // 貨櫃清單：每筆兩列，所有艙單來源 row 直接使用最終 row。
@@ -3240,7 +3260,7 @@ async function buildManifestXlsx(loc) {
     assertFormula(finalAppXml, `C${ar}`, `='准單(紅紙)-2份'!C${rr}:E${rr}`);
     assertFormula(finalAppXml, `F${ar}`, `='准單(紅紙)-2份'!F${rr}:H${rr}`);
     assertFormula(finalAppXml, `H${ar}`, `='准單(紅紙)-2份'!H${rr}`);
-    assertFormula(finalAppXml, `I${ar}`, `='准單(紅紙)-2份'!I${rr}:J${rr}`);
+    assertFormula(finalAppXml, `I${ar}`, `='准單(紅紙)-2份'!I${rr}`);
 
     assertFormula(finalCargoXml, `B${cr}`, `=進口艙單印1份!E${mr}`);
     assertFormula(finalCargoXml, `C${cr}`, `=進口艙單印1份!P${mr}`);
@@ -3262,14 +3282,20 @@ async function buildManifestXlsx(loc) {
     for (let i = 0; i < VENDOR_RESERVE_COUNT; i++) {
       const tr = t1Rows[i];
       const rr = redRows[i];
+      const ar = (reserveApp.reserveRowsByItemIndex.get(idx) || [])[i];
       const mr = manifestRows[i];
-      if (!tr || !rr || !mr) continue;
+      if (!tr || !rr || !ar || !mr) continue;
       assertFormula(finalT1Xml, `L${tr}`, `=進口艙單印1份!I${mr}`);
       assertFormula(reserveXml.get('准單(紅紙)-2份'), `A${rr}`, `=進口艙單印1份!B${mr}`);
       assertFormula(reserveXml.get('准單(紅紙)-2份'), `C${rr}`, `=進口艙單印1份!T${mr}`);
       assertFormula(reserveXml.get('准單(紅紙)-2份'), `F${rr}`, `=進口艙單印1份!C${mr}&進口艙單印1份!D${mr}`);
       assertFormula(reserveXml.get('准單(紅紙)-2份'), `H${rr}`, `=進口艙單印1份!I${mr}`);
       assertFormula(reserveXml.get('准單(紅紙)-2份'), `I${rr}`, `=進口艙單印1份!E${mr}`);
+      assertFormula(hiddenAppXml, `A${ar}`, `='准單(紅紙)-2份'!A${rr}:B${rr}`);
+      assertFormula(hiddenAppXml, `C${ar}`, `='准單(紅紙)-2份'!C${rr}:E${rr}`);
+      assertFormula(hiddenAppXml, `F${ar}`, `='准單(紅紙)-2份'!F${rr}:H${rr}`);
+      assertFormula(hiddenAppXml, `H${ar}`, `='准單(紅紙)-2份'!H${rr}`);
+      assertFormula(hiddenAppXml, `I${ar}`, `='准單(紅紙)-2份'!I${rr}`);
     }
   }
 
