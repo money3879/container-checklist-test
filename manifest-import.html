@@ -3087,6 +3087,29 @@ async function buildManifestXlsx(loc) {
       hiddenT1Api.setFormula(`E${tr}`, `='貨櫃清單-1份'!J${cr[0]}`, '');
       hiddenT1Api.setFormula(`J${tr}`, `=IF(進口艙單印1份!U${mr}="45G1","40HQ","")`, '');
       hiddenT1Api.setFormula(`K${tr}`, `=進口艙單印1份!P${mr}`, '');
+      // T1 的 L 欄也屬於艙單資料來源欄位；隱藏備用列必須跟著自己的資料列順序。
+      hiddenT1Api.setFormula(`L${tr}`, `=進口艙單印1份!I${mr}`, '');
+    }
+  }
+
+  // 准單（紅紙）隱藏備用列：每一家收貨人的第 1 筆緊接在該收貨人最後一筆實際資料列後，
+  // 後續 9 筆依序往下；所有公式來源一律使用同組的隱藏艙單列。
+  // 只處理隱藏備用列，不修改已確認正常的可見准單資料列。
+  const hiddenRedXml = reserveXml.get('准單(紅紙)-2份');
+  const hiddenRedApi = sheetApi(hiddenRedXml);
+  for (const group of getVendorGroups(items)) {
+    const idx = group.lastItemIndex;
+    const redRows = reserveRed.reserveRowsByItemIndex.get(idx) || [];
+    const manifestRows = reserveManifest.reserveRowsByItemIndex.get(idx) || [];
+    for (let i = 0; i < VENDOR_RESERVE_COUNT; i++) {
+      const rr = redRows[i];
+      const mr = manifestRows[i];
+      if (!rr || !mr) continue;
+      hiddenRedApi.setFormula(`A${rr}`, `=進口艙單印1份!B${mr}`, '');
+      hiddenRedApi.setFormula(`C${rr}`, `=進口艙單印1份!T${mr}`, '');
+      hiddenRedApi.setFormula(`F${rr}`, `=進口艙單印1份!C${mr}&進口艙單印1份!D${mr}`, '');
+      hiddenRedApi.setFormula(`H${rr}`, `=進口艙單印1份!I${mr}`, '');
+      hiddenRedApi.setFormula(`I${rr}`, `=進口艙單印1份!E${mr}`, '');
     }
   }
 
@@ -3227,6 +3250,27 @@ async function buildManifestXlsx(loc) {
     assertFormula(finalCargoXml, `G${cr}`, `=B${cr}`);
     assertFormula(finalCargoXml, `H${cr}`, `=進口艙單印1份!U${mr}`);
     assertFormula(finalCargoXml, `G${cr + 1}`, `=進口艙單印1份!I${mr}`);
+  }
+
+  // 隱藏備用列公式檢查：只檢查本輪修改的 T1 L 欄與准單隱藏列，
+  // 確認每一家收貨人的隱藏列都是依實際列號順著排，且來源對應同組艙單隱藏列。
+  for (const group of getVendorGroups(items)) {
+    const idx = group.lastItemIndex;
+    const t1Rows = reserveT1.reserveRowsByItemIndex.get(idx) || [];
+    const redRows = reserveRed.reserveRowsByItemIndex.get(idx) || [];
+    const manifestRows = reserveManifest.reserveRowsByItemIndex.get(idx) || [];
+    for (let i = 0; i < VENDOR_RESERVE_COUNT; i++) {
+      const tr = t1Rows[i];
+      const rr = redRows[i];
+      const mr = manifestRows[i];
+      if (!tr || !rr || !mr) continue;
+      assertFormula(finalT1Xml, `L${tr}`, `=進口艙單印1份!I${mr}`);
+      assertFormula(reserveXml.get('准單(紅紙)-2份'), `A${rr}`, `=進口艙單印1份!B${mr}`);
+      assertFormula(reserveXml.get('准單(紅紙)-2份'), `C${rr}`, `=進口艙單印1份!T${mr}`);
+      assertFormula(reserveXml.get('准單(紅紙)-2份'), `F${rr}`, `=進口艙單印1份!C${mr}&進口艙單印1份!D${mr}`);
+      assertFormula(reserveXml.get('准單(紅紙)-2份'), `H${rr}`, `=進口艙單印1份!I${mr}`);
+      assertFormula(reserveXml.get('准單(紅紙)-2份'), `I${rr}`, `=進口艙單印1份!E${mr}`);
+    }
   }
 
   // 原本已存在的「運送第1筆～第N筆」也要跟著艙單／貨櫃清單的實際最終列號更新。
