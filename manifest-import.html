@@ -3133,6 +3133,33 @@ async function buildManifestXlsx(loc) {
     }
   }
 
+  // 貨櫃清單隱藏備用列最終同步：每一家收貨人的第 1 組隱藏資料緊接在該收貨人最後一筆實際資料後，
+  // 每組佔 2 列；來源一對一對應同組的隱藏艙單列。
+  // 這裡直接重設 Template 的所有公式欄位，避免前面的 row shift / clone 流程留下舊的 16、9、10 等來源列。
+  const hiddenCargoXml = reserveXml.get('貨櫃清單-1份');
+  const hiddenCargoApi = sheetApi(hiddenCargoXml);
+  for (const group of getVendorGroups(items)) {
+    const idx = group.lastItemIndex;
+    const cargoRows = reserveCargo.reserveRowsByItemIndex.get(idx) || [];
+    const manifestRows = reserveManifest.reserveRowsByItemIndex.get(idx) || [];
+    for (let i = 0; i < VENDOR_RESERVE_COUNT; i++) {
+      const cr = cargoRows[i];
+      const mr = manifestRows[i];
+      if (!cr || !mr) continue;
+      const cargoRow1 = cr[0];
+      const cargoRow2 = cr[1];
+
+      hiddenCargoApi.setFormula(`B${cargoRow1}`, `=進口艙單印1份!E${mr}`, '');
+      hiddenCargoApi.setFormula(`C${cargoRow1}`, `=進口艙單印1份!P${mr}`, '');
+      hiddenCargoApi.setFormula(`D${cargoRow1}`, `=進口艙單印1份!B${mr}`, '');
+      hiddenCargoApi.setFormula(`E${cargoRow1}`, `=進口艙單印1份!C${mr}`, '');
+      hiddenCargoApi.setFormula(`F${cargoRow1}`, `=進口艙單印1份!D${mr}`, '');
+      hiddenCargoApi.setFormula(`G${cargoRow1}`, `=B${cargoRow1}`, '');
+      hiddenCargoApi.setFormula(`H${cargoRow1}`, `=進口艙單印1份!U${mr}`, '');
+      hiddenCargoApi.setFormula(`G${cargoRow2}`, `=進口艙單印1份!I${mr}`, '');
+    }
+  }
+
   // ══ 第六階段公式最終同步 ══
   // 備用列插入後，所有「原始第 N 筆」的實際 row 可能已經因前面廠商的
   // 10 筆隱藏列而往下移。這裡不再依賴前面多次 shift 的中間結果，
@@ -3296,6 +3323,29 @@ async function buildManifestXlsx(loc) {
       assertFormula(hiddenAppXml, `F${ar}`, `='准單(紅紙)-2份'!F${rr}:H${rr}`);
       assertFormula(hiddenAppXml, `H${ar}`, `='准單(紅紙)-2份'!H${rr}`);
       assertFormula(hiddenAppXml, `I${ar}`, `='准單(紅紙)-2份'!I${rr}`);
+    }
+  }
+
+  // 貨櫃清單隱藏備用列公式檢查：每組 2 列都必須順著同組隱藏艙單列。
+  // 第一列檢查 B/C/D/E/F/G/H，第二列檢查 G（重量）。
+  for (const group of getVendorGroups(items)) {
+    const idx = group.lastItemIndex;
+    const cargoRows = reserveCargo.reserveRowsByItemIndex.get(idx) || [];
+    const manifestRows = reserveManifest.reserveRowsByItemIndex.get(idx) || [];
+    for (let i = 0; i < VENDOR_RESERVE_COUNT; i++) {
+      const cr = cargoRows[i];
+      const mr = manifestRows[i];
+      if (!cr || !mr) continue;
+      const cargoRow1 = cr[0];
+      const cargoRow2 = cr[1];
+      assertFormula(finalCargoXml, `B${cargoRow1}`, `=進口艙單印1份!E${mr}`);
+      assertFormula(finalCargoXml, `C${cargoRow1}`, `=進口艙單印1份!P${mr}`);
+      assertFormula(finalCargoXml, `D${cargoRow1}`, `=進口艙單印1份!B${mr}`);
+      assertFormula(finalCargoXml, `E${cargoRow1}`, `=進口艙單印1份!C${mr}`);
+      assertFormula(finalCargoXml, `F${cargoRow1}`, `=進口艙單印1份!D${mr}`);
+      assertFormula(finalCargoXml, `G${cargoRow1}`, `=B${cargoRow1}`);
+      assertFormula(finalCargoXml, `H${cargoRow1}`, `=進口艙單印1份!U${mr}`);
+      assertFormula(finalCargoXml, `G${cargoRow2}`, `=進口艙單印1份!I${mr}`);
     }
   }
 
