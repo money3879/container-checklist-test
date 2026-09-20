@@ -566,20 +566,28 @@ function readFile(file) {
       const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
       if (!json.length) { showError(['檔案沒有資料']); return; }
 
-      // 第一階段只另外讀取 Excel 的第 14 欄（N 欄），不改動既有 uploadedRows。
+      // 台灣通知人改為依欄位名稱尋找，不再固定抓 Excel N 欄。
+      // 支援常見繁簡體／簡寫，避免欄位位置改變或標題用字不同時抓不到。
       const matrix = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
       const dataRows = matrix.slice(1);
+      const headerRow = matrix[0] || [];
+      const headerKeys = headerRow.map(v => String(v ?? '').trim());
+      const findHeaderKey = (patterns) => headerKeys.find(k => patterns.some(p => k.includes(p)));
+      const kTaiwanNotifyImport = findHeaderKey([
+        '台湾通知人', '台灣通知人', '台湾通知', '台灣通知'
+      ]);
+      const notifyIndex = kTaiwanNotifyImport ? headerKeys.indexOf(kTaiwanNotifyImport) : -1;
       nColumnTestRows = dataRows.map((row, index) => {
-        const rawN = String(row[13] ?? '').trim(); // N 欄 = 第 14 欄，0-based index 為 13
+        const rawN = notifyIndex >= 0 ? String(row[notifyIndex] ?? '').trim() : '';
         const extractedName = extractNotifyCompanyName(rawN);
         return { excelRow: index + 2, rawN, extractedName };
       }).filter(x => x.rawN);
 
-      // 保留每筆資料原始 Excel N 欄，供後續「收貨人＋卸存地」命中後，
+      // 保留每筆資料原始「台灣通知人」欄位，供後續「收貨人＋卸存地」命中後，
       // 在非 T6 的多筆同收貨人/同卸存地下再用台灣通知人選出正確 DB 資料。
       json.forEach((row, index) => {
         row.__excelRow = index + 2;
-        row.__rawTaiwanNotify = String(dataRows[index]?.[13] ?? '').trim();
+        row.__rawTaiwanNotify = notifyIndex >= 0 ? String(dataRows[index]?.[notifyIndex] ?? '').trim() : '';
       });
 
       uploadedRows = json;
@@ -859,7 +867,7 @@ function renderT6ConsigneeDbTest() {
   const keys = Object.keys(sample);
   const findKey = patterns => keys.find(k => patterns.some(p => k.includes(p)));
   const kConsignee = findKey(['收货人','收貨人']);
-  const kLocation = findKey(['卸存地']);
+  const kLocation = findKey(['台湾卸存地', '台灣卸存地', '台湾卸存地代码', '台灣卸存地代碼', '卸存地代码', '卸存地代碼', '卸存地']);
   if (!kConsignee || !kLocation) {
     section.classList.remove('show');
     return;
@@ -1063,7 +1071,16 @@ function generatePreview() {
   const kPieces     = findKey(['件数', '件數']);
   const kWeightRaw  = findKey(['毛重']);
   const kType       = findKey(['柜型', '櫃型']);
-  const kLocation   = findKey(['卸存地']);
+  const kLocation   = findKey([
+    '台湾卸存地', '台灣卸存地',
+    '台湾卸存地代码', '台灣卸存地代碼',
+    '卸存地代码', '卸存地代碼',
+    '卸存地'
+  ]);
+  const kTaiwanNotify = findKey([
+    '台湾通知人', '台灣通知人',
+    '台湾通知', '台灣通知'
+  ]);
 
   const fieldErrors = [];
   if (!kBillNo)    fieldErrors.push('找不到「提单号」欄位');
@@ -1071,7 +1088,8 @@ function generatePreview() {
   if (!kIntlCode)  fieldErrors.push('找不到「国际码」欄位');
   if (!kSeal)      fieldErrors.push('找不到「铅封号」欄位');
   if (!kType)      fieldErrors.push('找不到「柜型」欄位');
-  if (!kLocation)  fieldErrors.push('找不到「卸存地」欄位（無法依卸存地過濾資料）');
+  if (!kLocation)  fieldErrors.push('找不到「台湾卸存地／台灣卸存地／卸存地」欄位（無法依卸存地過濾資料）');
+  if (!kTaiwanNotify) fieldErrors.push('找不到「台湾通知人／台灣通知人」欄位（無法進行多筆收貨人資料消歧）');
   if (fieldErrors.length) { showError(fieldErrors); return; }
 
   // 依提單號排序（先排序，確保艙號分配順序正確）
@@ -1149,7 +1167,7 @@ function generatePreview() {
     } else {
       // 非 T6 若同一「收貨人＋卸存地」有多筆，才用 JIN XIN 的 N 欄台灣通知人
       // 從候選 DB 資料中選出正確的 taiwan_notify_name。
-      const rawNotify = String(row.__rawTaiwanNotify || '').trim();
+      const rawNotify = String(row[kTaiwanNotify] ?? row.__rawTaiwanNotify ?? '').trim();
       const notifyName = extractNotifyCompanyName(rawNotify) || rawNotify;
       const normalizedNotifyName = normalizeNotifyName(notifyName);
       const notifyMatches = sameConsigneeLocation.filter(c =>
