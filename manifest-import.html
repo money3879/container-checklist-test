@@ -318,21 +318,21 @@ table.excel-view tbody:first-of-type td { text-align:center; font-size:.68rem }
       <span id="file-loaded-text"></span>
     </div>
 
-    <!-- N 欄是診斷測試；T6 實際命中結果請看下面的「T6 實際艙單匹配測試」。 -->
+    <!-- 台灣通知人欄位是診斷測試；T6 實際命中結果請看下面的「T6 實際艙單匹配測試」。 -->
     <div class="n-column-test" id="n-column-test">
-      <div class="n-column-test-head">🔎 第一階段：大陸 Excel「N 欄」讀取測試</div>
+      <div class="n-column-test-head">🔎 第一階段：大陸 Excel「台灣通知人欄位」讀取測試</div>
       <div class="n-column-test-note" id="n-column-test-note"></div>
       <div class="n-column-test-scroll">
         <table>
           <thead>
-            <tr><th>Excel 資料列</th><th>N 欄原始內容</th><th>解析出的台灣通知人公司名稱</th><th>Supabase 比對結果 / 相似候選</th></tr>
+            <tr><th>Excel 資料列</th><th>台灣通知人欄位原始內容</th><th>解析出的台灣通知人公司名稱</th><th>Supabase 比對結果 / 相似候選</th></tr>
           </thead>
           <tbody id="n-column-test-body"></tbody>
         </table>
       </div>
     </div>
 
-    <!-- T6 實際命中測試：這裡才是「收貨人＋卸存地」對 DB 的真正匹配結果；N 欄只作診斷。 -->
+    <!-- T6 實際命中測試：這裡才是「收貨人＋卸存地」對 DB 的真正匹配結果；台灣通知人欄位只作診斷。 -->
     <div class="n-column-test" id="t6-consignee-test">
       <div class="n-column-test-head">🎯 T6 實際艙單匹配測試：收貨人＋卸存地 → Supabase</div>
       <div class="n-column-test-note" id="t6-consignee-test-note"></div>
