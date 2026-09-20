@@ -566,7 +566,7 @@ function readFile(file) {
       const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
       if (!json.length) { showError(['檔案沒有資料']); return; }
 
-      // 台灣通知人改為依欄位名稱尋找，不再固定抓 Excel N 欄。
+      // 台灣通知人改為依欄位名稱尋找，不再固定抓 Excel 欄位位置。
       // 支援常見繁簡體／簡寫，避免欄位位置改變或標題用字不同時抓不到。
       const matrix = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
       const dataRows = matrix.slice(1);
@@ -604,11 +604,11 @@ function readFile(file) {
   reader.readAsBinaryString(file);
 }
 
-// 第二階段：N 欄公司名稱與 Supabase 的 taiwan_notify_name 比對。
-// 先把 N 欄中的公司名稱從地址、統編、電話等後續資訊切出來，
+// 第二階段：台灣通知人欄位公司名稱與 Supabase 的 taiwan_notify_name 比對。
+// 先把台灣通知人欄位中的公司名稱從地址、統編、電話等後續資訊切出來，
 // 再做格式標準化完全比對；完全比對不到時，再提供相似度候選。
 function extractNotifyCompanyName(rawValue) {
-  // N 欄可能包含統編、公司名稱、地址、電話、Email，甚至把內容黏成一整段。
+  // 台灣通知人欄位可能包含統編、公司名稱、地址、電話、Email，甚至把內容黏成一整段。
   // 先做 Unicode/空白清理，再逐行尋找公司名稱；找不到法律後綴時再用公司關鍵字判斷。
   let raw = String(rawValue || '')
     .replace(/\uFEFF/g, '')
@@ -730,7 +730,7 @@ function isSameConsigneeAndTaiwanNotify(consigneeName, taiwanNotifyName) {
   return !!consignee && !!notify && consignee === notify;
 }
 
-// 專門處理「收貨人」欄位。不要與 N 欄台灣通知人的解析混用，
+// 專門處理「收貨人」欄位。不要與台灣通知人欄位的解析混用，
 // 因為收貨人是所有艙單資料的第一優先鍵。
 // 從收貨人原始欄位抓出可能存在的統編，用來驗證「收貨人＋卸存地」解析結果。
 // 規則仍然是先以「收貨人＋卸存地」找 DB；統編只在名稱解析結果需要驗證/消歧時使用。
@@ -820,7 +820,7 @@ function getNotifyMatches(name) {
   const exact = consignees.filter(c => normalizeNotifyName(c.taiwan_notify_name) === normalized);
   if (exact.length) return { exact, candidates: [], byConsignee: [] };
 
-  // 有些 Excel 的 N 欄會直接寫「收貨人公司名稱」，而 DB 該筆資料的
+  // 有些 Excel 的台灣通知人欄位會直接寫「收貨人公司名稱」，而 DB 該筆資料的
   // taiwan_notify_name 可能是另一家公司。此時用收貨人名稱作第二層精確對應，
   // 避免像 PGL 這種資料被誤判成「完全找不到」。
   const byConsignee = consignees.filter(c => normalizeConsigneeName(c.name) === normalized);
@@ -845,7 +845,7 @@ function renderNotifyMatch(item) {
   }
   if (result.byConsignee.length) {
     const html = result.byConsignee.map(c => `<div class="n-candidate">以收貨人名稱精確對應<br>${escapeHtml(c.name)}<small>此筆 DB 的台灣通知人：${escapeHtml(c.taiwan_notify_name || '（未設定）')}</small></div>`).join('');
-    return `<div class="n-match similar">🟡 N 欄名稱與 DB 收貨人名稱相符${html}<small>若為 T6 資料，實際艙單直接使用這筆 DB 的「台灣通知人」；N 欄比對僅保留作為檢查用途。</small></div>`;
+    return `<div class="n-match similar">🟡 台灣通知人欄位名稱與 DB 收貨人名稱相符${html}<small>若為 T6 資料，實際艙單直接使用這筆 DB 的「台灣通知人」；台灣通知人欄位比對僅保留作為檢查用途。</small></div>`;
   }
   if (result.candidates.length) {
     const html = result.candidates.map(x => `<div class="n-candidate">相似度 <b>${Math.round(x.score*100)}%</b><br>${escapeHtml(x.consignee.taiwan_notify_name)}</div>`).join('');
@@ -881,7 +881,7 @@ function renderT6ConsigneeDbTest() {
     return;
   }
 
-  note.textContent = '這一區才是 T6 實際艙單會採用的 DB 匹配結果：一律先用「收貨人＋卸存地」找 DB；T6 最終台灣通知人直接取命中 DB 的 taiwan_notify_name。N 欄不會覆蓋這個結果。';
+  note.textContent = '這一區才是 T6 實際艙單會採用的 DB 匹配結果：一律先用「收貨人＋卸存地」找 DB；T6 最終台灣通知人直接取命中 DB 的 taiwan_notify_name。台灣通知人欄位不會覆蓋這個結果。';
 
   body.innerHTML = t6Rows.map(({row, excelRow}) => {
     const raw = String(row[kConsignee] || '').trim();
@@ -905,7 +905,7 @@ function renderT6ConsigneeDbTest() {
         <td class="n-extracted">${escapeHtml(parsed)}</td>
         <td><b>${escapeHtml(loc)}</b></td>
         <td class="n-match exact">✅ 找到 1 筆<br>${escapeHtml(c.name)}<small>統編：${escapeHtml(c.tax_id || '—')}<br>DB 卸存地：${escapeHtml(c.location || '—')}</small></td>
-        <td class="n-match exact"><b>${escapeHtml(c.taiwan_notify_name || '（未設定）')}</b><small>T6 直接採用 DB 台灣通知人；N 欄不覆蓋。</small></td>
+        <td class="n-match exact"><b>${escapeHtml(c.taiwan_notify_name || '（未設定）')}</b><small>T6 直接採用 DB 台灣通知人；台灣通知人欄位不覆蓋。</small></td>
       </tr>`;
     }
 
@@ -935,7 +935,7 @@ function renderNColumnTest() {
     return;
   }
 
-  note.textContent = `成功讀取 N 欄：${nColumnTestRows.length} 筆；Supabase 收貨人資料：${Array.isArray(consignees) ? consignees.length : 0} 筆。公司名稱會先從 N 欄切出完整法律後綴（如 LTD、INC、CORP），再做「完全比對＋相似候選」測試；黃色候選不會自動採用。`;
+  note.textContent = `成功讀取台灣通知人欄位：${nColumnTestRows.length} 筆；Supabase 收貨人資料：${Array.isArray(consignees) ? consignees.length : 0} 筆。公司名稱會先從台灣通知人欄位切出完整法律後綴（如 LTD、INC、CORP），再做「完全比對＋相似候選」測試；黃色候選不會自動採用。`;
   body.innerHTML = nColumnTestRows.map(item => `
     <tr>
       <td>${item.excelRow}</td>
@@ -1154,7 +1154,7 @@ function generatePreview() {
     if (isT6) {
       // T6（目前只有 003C2002、003C2031）：
       // 「收貨人＋卸存地」命中後，直接採用 DB 的 taiwan_notify_name。
-      // Excel N 欄只作檢查，不得覆蓋，也不得阻擋 T6。
+      // Excel 台灣通知人欄位只作檢查，不得覆蓋，也不得阻擋 T6。
       if (sameConsigneeLocation.length === 1) {
         match = sameConsigneeLocation[0];
       } else {
@@ -1162,10 +1162,10 @@ function generatePreview() {
         continue;
       }
     } else if (sameConsigneeLocation.length === 1) {
-      // 非 T6 若「收貨人＋卸存地」只有一筆，直接使用這筆；N 欄不必介入。
+      // 非 T6 若「收貨人＋卸存地」只有一筆，直接使用這筆；台灣通知人欄位不必介入。
       match = sameConsigneeLocation[0];
     } else {
-      // 非 T6 若同一「收貨人＋卸存地」有多筆，才用 JIN XIN 的 N 欄台灣通知人
+      // 非 T6 若同一「收貨人＋卸存地」有多筆，才用 JIN XIN 的台灣通知人欄位消歧
       // 從候選 DB 資料中選出正確的 taiwan_notify_name。
       const rawNotify = String(row[kTaiwanNotify] ?? row.__rawTaiwanNotify ?? '').trim();
       const notifyName = extractNotifyCompanyName(rawNotify) || rawNotify;
@@ -1177,18 +1177,18 @@ function generatePreview() {
       if (notifyMatches.length === 1) {
         match = notifyMatches[0];
       } else if (notifyMatches.length > 1) {
-        notFound.add(`${consigneeName}（卸存地：${rowLocation}）的 N 欄台灣通知人對應到多筆 DB 資料，無法唯一判定`);
+        notFound.add(`${consigneeName}（卸存地：${rowLocation}）的台灣通知人欄位對應到多筆 DB 資料，無法唯一判定`);
         continue;
       } else {
         const candidateNames = sameConsigneeLocation
           .map(c => c.taiwan_notify_name || '（未設定）')
           .join(' / ');
-        notFound.add(`${consigneeName}（卸存地：${rowLocation}）有多筆 DB 資料，但 N 欄「${notifyName || '（空白）'}」沒有對應；候選台灣通知人：${candidateNames}`);
+        notFound.add(`${consigneeName}（卸存地：${rowLocation}）有多筆 DB 資料，但台灣通知人欄位「${notifyName || '（空白）'}」沒有對應；候選台灣通知人：${candidateNames}`);
         continue;
       }
     }
 
-    // 保留最後實際採用的 DB 資料，方便檢查「Excel N 欄」是否只是診斷資訊，
+    // 保留最後實際採用的 DB 資料，方便檢查「Excel 台灣通知人欄位」是否只是診斷資訊，
     // 以及確認 T6 是否真的使用 match.taiwan_notify_name。
     if (typeof window !== 'undefined') {
       window._manifestMatchTrace = window._manifestMatchTrace || [];
@@ -1974,7 +1974,7 @@ async function buildManifestXlsx(loc) {
     api.setValue(`P${row}`,it.sealNumRaw || '');
 
     // Q 欄規則：先完成「收貨人＋卸存地」的 DB 匹配，並依既有規則
-    // 決定 match（非 T6 多筆時已用 Excel N 欄消歧；T6 則直接採 DB）。
+    // 決定 match（非 T6 多筆時已用 Excel 台灣通知人欄位消歧；T6 則直接採 DB）。
     // 台灣通知人與收貨人相同 → SAME AS CONSIGNEE；不同 → 顯示 DB 的台灣通知人。
     const qNotify = String(it.taiwanNotifyName || '').trim();
     const qValue = isSameConsigneeAndTaiwanNotify(it.consigneeName, qNotify)
