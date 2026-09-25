@@ -470,6 +470,7 @@ let grouped = [];        // 依 name 分組後的結構 [{name, address, locatio
 let pendingDelete = null; // {type:'location'|'consignee', id, name}
 let editingLocId = null;
 let editingLocName = null;
+let expandedLocations = new Set(); // 記錄「依卸存地分類」目前展開的卸存地
 
 
 // 艙號排序：同時支援純數字（7101）與英文字母＋數字（JW01、PP01）。
