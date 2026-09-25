@@ -429,13 +429,17 @@ const VENDOR_RESERVE_COUNT = 10;
 
 const CONTAINER_TYPE_MAP = {
   '40HC': '45G1',
+  '40HQ': '45G1',
   '20GP': '22G1',
   "1X20'GP": '22G1',
   '1X20GP': '22G1',
   '1X20 GP': '22G1',
   "1X40'HC": '45G1',
   '1X40HC': '45G1',
-  '1X40 HC': '45G1'
+  '1X40 HC': '45G1',
+  "1X40'HQ": '45G1',
+  '1X40HQ': '45G1',
+  '1X40 HQ': '45G1'
 };
 
 function mapContainerTypeForManifest(rawType) {
@@ -448,7 +452,7 @@ function mapContainerTypeForManifest(rawType) {
     .replace(/[’‘′＇]/g, "'")
     .replace(/\s+/g, '');
   if (/^1X20'?GP$/.test(normalized) || /^20'?GP$/.test(normalized)) return '22G1';
-  if (/^1X40'?HC$/.test(normalized) || /^40'?HC$/.test(normalized)) return '45G1';
+  if (/^1X40'?(?:HC|HQ)$/.test(normalized) || /^40'?(?:HC|HQ)$/.test(normalized)) return '45G1';
   return String(rawType || '').trim();
 }
 
