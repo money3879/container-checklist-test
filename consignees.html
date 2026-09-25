@@ -97,8 +97,9 @@ main { padding:16px; padding-bottom:90px }
 /* ── LOCATION GROUP ── */
 .location-title {
   display:flex; align-items:center; justify-content:space-between; gap:10px;
-  margin-bottom:10px;
+  margin-bottom:10px; cursor:pointer; user-select:none;
 }
+.location-title:active { opacity:.75 }
 .location-title-main { font-size:1rem; font-weight:900; color:#1a5a8a; }
 .location-count { font-size:.68rem; color:#777; white-space:nowrap; }
 .consignee-mini { font-size:.9rem; font-weight:800; color:#111; }
@@ -566,12 +567,15 @@ function render() {
     }).join('');
     return;
   }
-  listEl.innerHTML=grouped.map(g=>`<div class="location-card">
-    <div class="location-title">
-      <div class="location-title-main">📍 ${escapeHtml(g.location)}</div>
+  grouped.forEach(g=>{ if(!expandedLocations.has(g.location)) expandedLocations.add(g.location); });
+  listEl.innerHTML=grouped.map(g=>{
+    const expanded = expandedLocations.has(g.location);
+    return `<div class="location-card">
+    <div class="location-title" onclick="toggleLocation('${escapeAttr(g.location)}')">
+      <div class="location-title-main">${expanded?'▼':'▶'} 📍 ${escapeHtml(g.location)}</div>
       <div class="location-count">${g.rows.length} 家收貨人</div>
     </div>
-    ${g.rows.map(r=>`<div class="loc-row"><div class="loc-info">
+    ${expanded ? g.rows.map(r=>`<div class="loc-row"><div class="loc-info">
       <div class="consignee-mini">${escapeHtml(r.chineseName||r.name)}</div>
       <div class="consignee-en">英文名稱：${escapeHtml(r.name)}</div>
       ${r.taiwanNotifyName?`<div class="consignee-en">台灣通知人：${escapeHtml(r.taiwanNotifyName)}</div>`:''}
@@ -585,8 +589,15 @@ function render() {
       <button class="loc-btn loc-btn-edit" onclick="openEditConsignee('${escapeAttr(r.name)}')">編輯</button>
       <button class="loc-btn loc-btn-edit" onclick="openEditLocation('${r.id}','${escapeAttr(r.name)}','${escapeAttr(g.location)}')">修改艙號</button>
       <button class="loc-btn loc-btn-del" onclick="askDeleteLocation('${r.id}','${escapeAttr(r.name)}','${escapeAttr(g.location)}')">刪除</button>
-    </div></div>`).join('')}
-  </div>`).join('');
+    </div></div>`).join('') : ''}
+  </div>`;
+  }).join('');
+}
+
+function toggleLocation(location) {
+  if (expandedLocations.has(location)) expandedLocations.delete(location);
+  else expandedLocations.add(location);
+  render();
 }
 
 function escapeHtml(s) {
