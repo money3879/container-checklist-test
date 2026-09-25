@@ -568,7 +568,7 @@ function render() {
     }).join('');
     return;
   }
-  grouped.forEach(g=>{ if(!expandedLocations.has(g.location)) expandedLocations.add(g.location); });
+  // 依卸存地分類：預設全部收起；點擊卸存地標題後才展開。
   listEl.innerHTML=grouped.map(g=>{
     const expanded = expandedLocations.has(g.location);
     return `<div class="location-card">
