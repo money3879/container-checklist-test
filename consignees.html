@@ -555,9 +555,9 @@ function render() {
         ${rows.map(x=>`<div class="loc-row"><div class="loc-info">
           <div><span class="seal-badge">艙號 ${escapeHtml(String(x.seal_start))}</span> ・ 卸存地：<b>${escapeHtml(x.location)}</b> ・ 單位：<b>${escapeHtml(x.unit)}</b></div>
         </div><div class="loc-actions">
-          <button class="loc-btn loc-btn-edit" onclick="openEditLocation('${x.id}','${escapeAttr(x.name)}')">編輯</button>
-          <button class="loc-btn loc-btn-del" onclick="askDeleteLocation('${x.id}','${escapeAttr(x.name)}','${escapeAttr(x.location)}')">刪除</button>
-        </div></div>`).join('')}
+           <button class="loc-btn loc-btn-edit" onclick="openEditLocation('${x.id}','${escapeAttr(x.name)}')">修改艙號</button>
+           <button class="loc-btn" onclick="openAddLocation('${escapeAttr(x.name)}')">新增卸存地</button>
+           <button class="loc-btn loc-btn-del" onclick="askDeleteLocation('${x.id}','${escapeAttr(x.name)}','${escapeAttr(x.location)}')">刪除</button>
       </div>`;
     }).join('');
     return;
@@ -578,9 +578,10 @@ function render() {
         ${r.contactInfo?`<span>聯絡人：<b>${escapeHtml(r.contactInfo).replace(/\n/g,' / ')}</b></span>`:''}
       </div>
     </div><div class="loc-actions">
-      <button class="loc-btn loc-btn-edit" onclick="openEditConsignee('${escapeAttr(r.name)}')">編輯</button>
-      <button class="loc-btn loc-btn-del" onclick="askDeleteLocation('${r.id}','${escapeAttr(r.name)}','${escapeAttr(g.location)}')">刪除</button>
-    </div></div>`).join('')}
+       <button class="loc-btn loc-btn-edit" onclick="openEditConsignee('${escapeAttr(r.name)}')">編輯</button>
+       <button class="loc-btn loc-btn-edit" onclick="openEditLocation('${r.id}','${escapeAttr(r.name)}')">修改艙號</button>
+       <button class="loc-btn" onclick="openAddLocation('${escapeAttr(r.name)}')">新增卸存地</button>
+       <button class="loc-btn loc-btn-del" onclick="askDeleteLocation('${r.id}','${escapeAttr(r.name)}','${escapeAttr(g.location)}')">刪除</button>
   </div>`).join('');
 }
 
