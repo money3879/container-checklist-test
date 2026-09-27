@@ -1584,13 +1584,12 @@ async function buildManifestXlsx(loc) {
     if ((relNode.getAttribute('Type') || '').includes('/calcChain')) relNode.parentNode.removeChild(relNode);
   }
 
-  // 匯出時已在下方先計算並寫入公式快取值，因此不再要求 Excel 開啟時
-  // 強制整本活頁簿重新計算，避免使用者只是查看工作表後關閉也被判定為已變更。
+  // workbook 設為開啟時自動重新計算。
   const calcPr = workbookXml.getElementsByTagNameNS(NS, 'calcPr')[0];
   if (calcPr) {
     calcPr.setAttribute('calcMode', 'auto');
-    calcPr.setAttribute('fullCalcOnLoad', '0');
-    calcPr.setAttribute('forceFullCalc', '0');
+    calcPr.setAttribute('fullCalcOnLoad', '1');
+    calcPr.setAttribute('forceFullCalc', '1');
   }
 
   function getSheetTarget(sheetName) {
@@ -2620,6 +2619,14 @@ async function buildManifestXlsx(loc) {
     ? parser.parseFromString(await ctFileTransport.async('text'), 'application/xml')
     : null;
 
+  // 運送單每新增一張工作表，就建立自己的 printerSettings，避免多張工作表共用同一個列印設定。
+  // Excel 開啟後會自行把共用設定拆開；這裡直接產生最終結構，避免 Excel 儲存時再做一次整理。
+  let maxPrinterSettingsNum = 0;
+  for (const name of Object.keys(zip.files || {})) {
+    const m = String(name).match(/^xl\/printerSettings\/printerSettings(\d+)\.bin$/);
+    if (m) maxPrinterSettingsNum = Math.max(maxPrinterSettingsNum, Number(m[1]));
+  }
+
   // 以第1張 Template 運送單為母版；它本身是第1筆，所以公式基準是艙單第16列、貨櫃清單第9列。
   const sourceTransportXml = parser.parseFromString(
     await zip.file(sourceTransport.target).async('text'),
@@ -2681,11 +2688,28 @@ async function buildManifestXlsx(loc) {
     zip.file(newTarget, serializer.serializeToString(newXml));
 
     // 複製 Template 第1張運送單的 worksheet relationship。
+    // printerSettings 不與母版共用：每張新增的運送單建立自己的 printerSettings*.bin，
+    // 讓 Excel 不必在第一次儲存時再把共用列印設定逐張拆開。
     const sourceRelPath = `xl/worksheets/_rels/${sourceTransport.target.split('/').pop()}.rels`;
     const newRelPath = `xl/worksheets/_rels/sheet${newSheetId}.xml.rels`;
     const sourceRelFile = zip.file(sourceRelPath);
     if (sourceRelFile) {
-      zip.file(newRelPath, await sourceRelFile.async('text'));
+      const relXml = parser.parseFromString(await sourceRelFile.async('text'), 'application/xml');
+      const printerRel = Array.from(relXml.getElementsByTagName('Relationship'))
+        .find(r => String(r.getAttribute('Type') || '').endsWith('/printerSettings'));
+      if (printerRel) {
+        const sourcePrinterTarget = String(printerRel.getAttribute('Target') || '');
+        const sourcePrinterPath = sourcePrinterTarget.startsWith('xl/')
+          ? sourcePrinterTarget
+          : `xl/${sourcePrinterTarget.replace(/^(?:\.\.\/)+/, '').replace(/^\.\//, '').replace(/^\//, '')}`;
+        const sourcePrinterFile = zip.file(sourcePrinterPath);
+        if (sourcePrinterFile) {
+          const newPrinterPath = `xl/printerSettings/printerSettings${++maxPrinterSettingsNum}.bin`;
+          zip.file(newPrinterPath, await sourcePrinterFile.async('uint8array'));
+          printerRel.setAttribute('Target', `../printerSettings/printerSettings${maxPrinterSettingsNum}.bin`);
+        }
+      }
+      zip.file(newRelPath, serializer.serializeToString(relXml));
     }
 
     // workbook.xml 新增 sheet。
@@ -3514,7 +3538,24 @@ async function buildManifestXlsx(loc) {
         const sourceRelPath = `xl/worksheets/_rels/${sourceTransport.target.split('/').pop()}.rels`;
         const newRelPath = `xl/worksheets/_rels/sheet${newTargetNumber}.xml.rels`;
         const sourceRelFile = zip.file(sourceRelPath);
-        if (sourceRelFile) zip.file(newRelPath, await sourceRelFile.async('text'));
+        if (sourceRelFile) {
+          const relXml = parser.parseFromString(await sourceRelFile.async('text'), 'application/xml');
+          const printerRel = Array.from(relXml.getElementsByTagName('Relationship'))
+            .find(r => String(r.getAttribute('Type') || '').endsWith('/printerSettings'));
+          if (printerRel) {
+            const sourcePrinterTarget = String(printerRel.getAttribute('Target') || '');
+            const sourcePrinterPath = sourcePrinterTarget.startsWith('xl/')
+              ? sourcePrinterTarget
+              : `xl/${sourcePrinterTarget.replace(/^\.\//, '').replace(/^\//, '')}`;
+            const sourcePrinterFile = zip.file(sourcePrinterPath);
+            if (sourcePrinterFile) {
+              const newPrinterPath = `xl/printerSettings/printerSettings${++maxPrinterSettingsNum}.bin`;
+              zip.file(newPrinterPath, await sourcePrinterFile.async('uint8array'));
+              printerRel.setAttribute('Target', `../printerSettings/printerSettings${maxPrinterSettingsNum}.bin`);
+            }
+          }
+          zip.file(newRelPath, serializer.serializeToString(relXml));
+        }
 
         const relNode = relsXml.createElementNS(
           'http://schemas.openxmlformats.org/package/2006/relationships',
