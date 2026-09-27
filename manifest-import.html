@@ -1584,12 +1584,13 @@ async function buildManifestXlsx(loc) {
     if ((relNode.getAttribute('Type') || '').includes('/calcChain')) relNode.parentNode.removeChild(relNode);
   }
 
-  // workbook 設為開啟時自動重新計算。
+  // 匯出時已在下方先計算並寫入公式快取值，因此不再要求 Excel 開啟時
+  // 強制整本活頁簿重新計算，避免使用者只是查看工作表後關閉也被判定為已變更。
   const calcPr = workbookXml.getElementsByTagNameNS(NS, 'calcPr')[0];
   if (calcPr) {
     calcPr.setAttribute('calcMode', 'auto');
-    calcPr.setAttribute('fullCalcOnLoad', '1');
-    calcPr.setAttribute('forceFullCalc', '1');
+    calcPr.setAttribute('fullCalcOnLoad', '0');
+    calcPr.setAttribute('forceFullCalc', '0');
   }
 
   function getSheetTarget(sheetName) {
