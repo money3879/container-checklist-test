@@ -2671,13 +2671,8 @@ async function buildManifestXlsx(loc) {
 
       f.textContent = formula;
 
-      // 公式快取清空，讓 Excel 開啟時依新的來源重新計算。
-      for (const v of Array.from(cell.getElementsByTagNameNS(NS, 'v'))) {
-        cell.removeChild(v);
-      }
-      const v = newXml.createElementNS(NS, 'v');
-      v.textContent = '';
-      cell.appendChild(v);
+      // 測試：暫時保留 Template 原有的公式快取值，不在匯出時清空 <v>。
+      // 目的：確認 Excel 開啟後要求儲存是否由公式快取被清空/重新計算所造成。
     }
 
     // 維持 A1:P41 的 Template dimension；列印範圍則明確設定為 A1:N41。
@@ -3519,10 +3514,7 @@ async function buildManifestXlsx(loc) {
           formula = formula.replace(/('貨櫃清單-1份'![A-Z]{1,3})9\b/g, `$1${cr[0]}`);
 
           f.textContent = formula;
-          for (const v of Array.from(cell.getElementsByTagNameNS(NS, 'v'))) cell.removeChild(v);
-          const v = newXml.createElementNS(NS, 'v');
-          v.textContent = '';
-          cell.appendChild(v);
+          // 測試：保留 Template 原有的公式快取值，不清空 <v>。
         }
         const dimension = newXml.documentElement.getElementsByTagNameNS(NS, 'dimension')[0];
         if (dimension) dimension.setAttribute('ref', 'A1:P41');
