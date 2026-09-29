@@ -1584,13 +1584,11 @@ async function buildManifestXlsx(loc) {
     if ((relNode.getAttribute('Type') || '').includes('/calcChain')) relNode.parentNode.removeChild(relNode);
   }
 
-  // workbook 設為開啟時自動重新計算。
+  // 測試：不在匯出檔強制寫入 calcPr 的重新計算旗標。
+  // 先移除 calcPr，讓 Excel 使用自身預設的計算模式；其他公式與快取處理不變。
+  // 目的：確認 workbook.xml 的 calcPr 是否是造成 Excel 開啟後要求儲存的原因。
   const calcPr = workbookXml.getElementsByTagNameNS(NS, 'calcPr')[0];
-  if (calcPr) {
-    calcPr.setAttribute('calcMode', 'auto');
-    calcPr.setAttribute('fullCalcOnLoad', '1');
-    calcPr.setAttribute('forceFullCalc', '1');
-  }
+  if (calcPr) calcPr.parentNode.removeChild(calcPr);
 
   function getSheetTarget(sheetName) {
     const sheetEl = Array.from(workbookXml.getElementsByTagNameNS(NS, 'sheet'))
