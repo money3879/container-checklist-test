@@ -1567,8 +1567,8 @@ async function buildManifestXlsx(loc) {
   const templateBuf = await response.arrayBuffer();
   const zip = await JSZip.loadAsync(templateBuf);
 
-  // 範本內原有 calcChain 是舊的計算快取；修改公式引用的來源資料後，
-  // 保留它反而會讓 Excel 啟動時要求修復，因此移除並讓 Excel 重新計算。
+  // 不沿用範本的舊 calcChain。匯出完成後會依「最終產生的工作表與公式」重新建立 calcChain，
+  // 避免舊的工作表/公式位置與動態複製後的活頁簿不一致。
   if (zip.file('xl/calcChain.xml')) zip.remove('xl/calcChain.xml');
 
   const NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
@@ -3659,6 +3659,77 @@ async function buildManifestXlsx(loc) {
       if (ov.getAttribute('PartName') === '/xl/calcChain.xml') ov.parentNode.removeChild(ov);
     }
     zip.file('[Content_Types].xml', serializer.serializeToString(ctXmlTransport));
+  }
+
+  // ══ 最後建立「與匯出結果完全同步」的 calcChain ══
+  // calcChain 不是公式本身，而是 Excel 用來記錄公式計算順序/位置的索引。
+  // 原本程式直接刪除它，Excel 開啟後會重新建立計算鏈；在本專案中又有大量
+  // 動態複製的「運送第X筆」，因此容易讓 Excel 在開啟時重新處理整本活頁簿。
+  // 這裡改成：所有工作表、所有最終公式都完成後，再從最終 XML 重新產生。
+  {
+    const chainDoc = parser.parseFromString(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><calcChain xmlns="' + NS + '"></calcChain>',
+      'application/xml'
+    );
+    const chainRoot = chainDoc.documentElement;
+    const relNodes = Array.from(relsXml.getElementsByTagName('Relationship'));
+    const sheetNodes = Array.from(workbookXml.getElementsByTagNameNS(NS, 'sheet'));
+    const usedTargets = new Set();
+
+    for (const sheetEl of sheetNodes) {
+      const rid = sheetEl.getAttributeNS(REL_NS, 'id');
+      const rel = relNodes.find(x => x.getAttribute('Id') === rid);
+      if (!rel) continue;
+      let target = rel.getAttribute('Target').replace(/^\//, '');
+      if (!target.startsWith('xl/')) target = 'xl/' + target.replace(/^\.\//, '');
+      if (usedTargets.has(target)) continue;
+      usedTargets.add(target);
+      const file = zip.file(target);
+      if (!file) continue;
+      const sheetDoc = parser.parseFromString(await file.async('text'), 'application/xml');
+      const formulaCells = Array.from(sheetDoc.getElementsByTagNameNS(NS, 'c'))
+        .filter(cell => cell.getElementsByTagNameNS(NS, 'f').length > 0);
+      for (const cell of formulaCells) {
+        const ref = cell.getAttribute('r');
+        if (!ref) continue;
+        const c = chainDoc.createElementNS(NS, 'c');
+        c.setAttribute('r', ref);
+        c.setAttribute('i', sheetEl.getAttribute('sheetId'));
+        chainRoot.appendChild(c);
+      }
+    }
+
+    zip.file('xl/calcChain.xml', serializer.serializeToString(chainDoc));
+
+    // workbook.xml.rels：加入 calcChain 關聯。
+    const relRoot = relsXml.documentElement;
+    const existingCalcRel = Array.from(relsXml.getElementsByTagName('Relationship'))
+      .find(x => (x.getAttribute('Type') || '').includes('/calcChain'));
+    if (existingCalcRel) {
+      existingCalcRel.setAttribute('Target', 'calcChain.xml');
+      existingCalcRel.setAttribute('Type', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain');
+    } else {
+      const rel = relsXml.createElement('Relationship');
+      rel.setAttribute('Id', 'rIdCalcChain');
+      rel.setAttribute('Type', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain');
+      rel.setAttribute('Target', 'calcChain.xml');
+      relRoot.appendChild(rel);
+    }
+    zip.file('xl/_rels/workbook.xml.rels', serializer.serializeToString(relsXml));
+
+    // [Content_Types].xml：加入 calcChain 的 Override。
+    const ctFileFinal = zip.file('[Content_Types].xml');
+    if (ctFileFinal) {
+      const ctFinal = parser.parseFromString(await ctFileFinal.async('text'), 'application/xml');
+      const ctRootFinal = ctFinal.documentElement;
+      const oldOverrides = Array.from(ctFinal.getElementsByTagName('Override'));
+      oldOverrides.filter(x => x.getAttribute('PartName') === '/xl/calcChain.xml').forEach(x => x.parentNode.removeChild(x));
+      const ov = ctFinal.createElement('Override');
+      ov.setAttribute('PartName', '/xl/calcChain.xml');
+      ov.setAttribute('ContentType', 'application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml');
+      ctRootFinal.appendChild(ov);
+      zip.file('[Content_Types].xml', serializer.serializeToString(ctFinal));
+    }
   }
 
   return await zip.generateAsync({type:'arraybuffer',compression:'DEFLATE'});
