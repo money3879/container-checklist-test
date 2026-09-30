@@ -3709,7 +3709,7 @@ async function buildManifestXlsx(loc) {
       existingCalcRel.setAttribute('Target', 'calcChain.xml');
       existingCalcRel.setAttribute('Type', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain');
     } else {
-      const rel = relsXml.createElement('Relationship');
+      const rel = relsXml.createElementNS('http://schemas.openxmlformats.org/package/2006/relationships', 'Relationship');
       rel.setAttribute('Id', 'rIdCalcChain');
       rel.setAttribute('Type', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain');
       rel.setAttribute('Target', 'calcChain.xml');
@@ -3724,7 +3724,7 @@ async function buildManifestXlsx(loc) {
       const ctRootFinal = ctFinal.documentElement;
       const oldOverrides = Array.from(ctFinal.getElementsByTagName('Override'));
       oldOverrides.filter(x => x.getAttribute('PartName') === '/xl/calcChain.xml').forEach(x => x.parentNode.removeChild(x));
-      const ov = ctFinal.createElement('Override');
+      const ov = ctFinal.createElementNS('http://schemas.openxmlformats.org/package/2006/content-types', 'Override');
       ov.setAttribute('PartName', '/xl/calcChain.xml');
       ov.setAttribute('ContentType', 'application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml');
       ctRootFinal.appendChild(ov);
