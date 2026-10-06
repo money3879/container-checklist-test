@@ -1573,8 +1573,31 @@ async function buildManifestXlsx(loc) {
 
   const NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
   const REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const XR_REVISION_NS = 'http://schemas.microsoft.com/office/spreadsheetml/2014/revision';
   const parser = new DOMParser();
   const serializer = new XMLSerializer();
+
+  // Excel 的 worksheet xr:uid 是工作表本身的 GUID 識別值。
+  // 複製工作表時不能把母版的 uid 一起複製，否則新舊工作表會共用同一個識別值。
+  // 方案 A：保留 Template 原有且唯一的 uid；只有新建立的 worksheet 產生新的 GUID。
+  function createWorksheetUid() {
+    if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+      return `{${globalThis.crypto.randomUUID().toUpperCase()}}`;
+    }
+    if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') {
+      const bytes = new Uint8Array(16);
+      globalThis.crypto.getRandomValues(bytes);
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+      return `{${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}}`;
+    }
+    throw new Error('瀏覽器不支援產生 Excel 工作表識別碼');
+  }
+
+  function assignNewWorksheetUid(worksheetRoot) {
+    worksheetRoot.setAttributeNS(XR_REVISION_NS, 'xr:uid', createWorksheetUid());
+  }
 
   const workbookXml = parser.parseFromString(await zip.file('xl/workbook.xml').async('text'), 'application/xml');
   const relsXml = parser.parseFromString(await zip.file('xl/_rels/workbook.xml.rels').async('text'), 'application/xml');
@@ -1584,9 +1607,13 @@ async function buildManifestXlsx(loc) {
     if ((relNode.getAttribute('Type') || '').includes('/calcChain')) relNode.parentNode.removeChild(relNode);
   }
 
-  // 診斷版：不要求 Excel 開啟時強制重新計算；保留既有公式快取。
+  // workbook 設為開啟時自動重新計算。
   const calcPr = workbookXml.getElementsByTagNameNS(NS, 'calcPr')[0];
-  if (calcPr) calcPr.parentNode.removeChild(calcPr);
+  if (calcPr) {
+    calcPr.setAttribute('calcMode', 'auto');
+    calcPr.setAttribute('fullCalcOnLoad', '1');
+    calcPr.setAttribute('forceFullCalc', '1');
+  }
 
   function getSheetTarget(sheetName) {
     const sheetEl = Array.from(workbookXml.getElementsByTagNameNS(NS, 'sheet'))
@@ -2641,6 +2668,8 @@ async function buildManifestXlsx(loc) {
 
     const newXml = sourceTransportXml.cloneNode(true);
     const root = newXml.documentElement;
+    // 新工作表不可沿用「運送第1筆」母版的 xr:uid。
+    assignNewWorksheetUid(root);
 
     // 公式來源列：
     // 第2筆 → 艙單17、貨櫃清單11
@@ -3479,6 +3508,8 @@ async function buildManifestXlsx(loc) {
         const newLocalSheetId = Array.from(sheetsEl.getElementsByTagNameNS(NS, 'sheet')).length;
 
         const newXml = sourceTransportXml.cloneNode(true);
+        // 每一張隱藏備用運送單也必須有自己的 worksheet xr:uid。
+        assignNewWorksheetUid(newXml.documentElement);
         for (const cell of Array.from(newXml.getElementsByTagNameNS(NS, 'c'))) {
           const f = cell.getElementsByTagNameNS(NS, 'f')[0];
           if (!f || f.textContent == null) continue;
@@ -3835,6 +3866,22 @@ async function buildManifestXlsx(loc) {
     return Number.isFinite(num) ? num : expr;
   }
 
+  // 方案 A 最後再做一次安全檢查：
+  // Template 原本有效且唯一的 xr:uid 保留不動；若發現缺少或重複，才補發新的 GUID。
+  // 這樣既不破壞 Template 原有識別值，也能避免任何新/異常 worksheet 共用 uid。
+  const usedWorksheetUids = new Set();
+  for (const [, info] of allSheets) {
+    const root = info.xml.documentElement;
+    if (!root) continue;
+    const uid = root.getAttributeNS(XR_REVISION_NS, 'uid');
+    if (!uid || usedWorksheetUids.has(uid)) {
+      assignNewWorksheetUid(root);
+      usedWorksheetUids.add(root.getAttributeNS(XR_REVISION_NS, 'uid'));
+    } else {
+      usedWorksheetUids.add(uid);
+    }
+  }
+
   for (const [sheetName, info] of allSheets) {
     const sheetXml = info.xml;
     for (const cell of Array.from(sheetXml.getElementsByTagNameNS(NS, 'c'))) {
@@ -3855,61 +3902,6 @@ async function buildManifestXlsx(loc) {
       cell.appendChild(v);
     }
     zip.file(info.target, serializer.serializeToString(sheetXml));
-  }
-
-
-  // ═══════════════════════════════════════════════════════════════════
-  // printerSettings 診斷：解除所有工作表共用的列印設定檔。
-  // 不改 .bin 內容，只複製原檔並修改 worksheet relationship。
-  // ═══════════════════════════════════════════════════════════════════
-  {
-    const printerRelType = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/printerSettings';
-    const relPaths = Object.keys(zip.files).filter(path =>
-      /^xl\/worksheets\/_rels\/[^/]+\.xml\.rels$/i.test(path)
-    );
-    const used = new Set(
-      Object.keys(zip.files)
-        .filter(path => /^xl\/printerSettings\/printerSettings\d+\.bin$/i.test(path))
-        .map(path => path.toLowerCase())
-    );
-    let nextNo = 1;
-
-    for (const relsPath of relPaths) {
-      const relFile = zip.file(relsPath);
-      if (!relFile) continue;
-      const relXml = parser.parseFromString(await relFile.async('text'), 'application/xml');
-      let changed = false;
-
-      for (const relNode of Array.from(relXml.getElementsByTagName('Relationship'))) {
-        if (relNode.getAttribute('Type') !== printerRelType) continue;
-        let target = (relNode.getAttribute('Target') || '').replace(/\\/g, '/');
-
-        const baseParts = relsPath.split('/');
-        baseParts.pop();
-        const parts = baseParts.concat(target.split('/'));
-        const normalized = [];
-        for (const part of parts) {
-          if (!part || part === '.') continue;
-          if (part === '..') normalized.pop();
-          else normalized.push(part);
-        }
-        const oldPath = normalized.join('/');
-        const oldFile = zip.file(oldPath);
-        if (!oldFile) continue;
-
-        let newPath;
-        do {
-          newPath = `xl/printerSettings/printerSettings${nextNo++}.bin`;
-        } while (zip.file(newPath) || used.has(newPath.toLowerCase()));
-        used.add(newPath.toLowerCase());
-
-        zip.file(newPath, await oldFile.async('uint8array'));
-        relNode.setAttribute('Target', `../printerSettings/${newPath.split('/').pop()}`);
-        changed = true;
-      }
-
-      if (changed) zip.file(relsPath, serializer.serializeToString(relXml));
-    }
   }
 
   const ctFile = zip.file('[Content_Types].xml');
