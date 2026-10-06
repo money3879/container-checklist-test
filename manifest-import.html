@@ -1974,7 +1974,7 @@ async function buildManifestXlsx(loc) {
     const row=templateStart+i;
     api.setValue(`A${row}`,it.billNo);
     api.setValue(`B${row}`,it.sealNo);
-    api.setValue(`C${row}`,Number(it.pieces)||0);
+    api.setValue(`C${row}`, it.pieces == null || String(it.pieces).trim() === '' ? '' : Number(it.pieces));
     api.setValue(`D${row}`,it.unit);
     // E = 貨櫃國際碼，例如 TCNU9125529；P = 封條，例如 200405。
     api.setValue(`E${row}`,it.trackNo || '');
@@ -1985,7 +1985,7 @@ async function buildManifestXlsx(loc) {
     api.setFormula(`F${row}`,`=${formula}`,formulaResult);
 
     api.setValue(`H${row}`,`R:${loc}\nT:KNH0010W\nL:CNXMN`);
-    api.setValue(`I${row}`,Number(it.weight)||0);
+    api.setValue(`I${row}`, it.weight == null || String(it.weight).trim() === '' ? '' : Number(it.weight));
     api.setValue(`J${row}`,'KGS');
 
     // K:M 是新版 Template 的合併儲存格，K 才是 master cell。
