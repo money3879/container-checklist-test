@@ -2393,6 +2393,38 @@ async function buildManifestXlsx(loc) {
   // 卸存地主檔：依網站選擇的卸存地代碼，將完整顯示名稱寫入貨櫃清單 C4:D4。
   cargo.api.setValue('C4', locationDisplayName);
 
+  // 讀取 Template「貨櫃清單-1份」J9 的實際內容，後續所有貨櫃資料列 J 欄都沿用此值。
+  // J9 可能是 Excel shared string，因此這裡同時支援 inlineStr、shared string 與一般文字/數值。
+  async function readTemplateCellText(sheetXml, ref) {
+    const m = String(ref).match(/^([A-Z]+)(\d+)$/i);
+    if (!m) return '';
+    const row = Array.from(sheetXml.getElementsByTagNameNS(NS, 'row'))
+      .find(r => r.getAttribute('r') === m[2]);
+    if (!row) return '';
+    const cell = Array.from(row.getElementsByTagNameNS(NS, 'c'))
+      .find(c => c.getAttribute('r') === ref);
+    if (!cell) return '';
+
+    const inline = cell.getElementsByTagNameNS(NS, 'is')[0];
+    if (inline) return Array.from(inline.getElementsByTagNameNS(NS, 't')).map(t => t.textContent || '').join('');
+
+    const v = cell.getElementsByTagNameNS(NS, 'v')[0];
+    if (!v) return '';
+    const raw = v.textContent || '';
+    if (cell.getAttribute('t') === 's') {
+      const ssFile = zip.file('xl/sharedStrings.xml');
+      if (!ssFile) return '';
+      const ssXml = parser.parseFromString(await ssFile.async('text'), 'application/xml');
+      const strings = Array.from(ssXml.getElementsByTagNameNS(NS, 'si')).map(si =>
+        Array.from(si.getElementsByTagNameNS(NS, 't')).map(t => t.textContent || '').join('')
+      );
+      return strings[Number(raw)] ?? '';
+    }
+    return raw;
+  }
+
+  const cargoTemplateJ9 = await readTemplateCellText(cargo.xml, 'J9');
+
   const cargoStart = 9;
   const cargoTemplateCount = 1;
   const cargoExtra = Math.max(0, items.length - cargoTemplateCount);
@@ -2522,8 +2554,8 @@ async function buildManifestXlsx(loc) {
     // 第二列 G 欄是範例原本的公式：抓艙單 I 欄重量。
     cargo.api.setFormula(`G${r2}`, `=進口艙單印1份!I${mrow}`, '');
 
-    // J 欄依 Template 原本固定為 ESN500；I 欄進出站註記保留範例狀態。
-    cargo.api.setValue(`J${r1}`, 'ESN500');
+    // J 欄跟隨 Template「貨櫃清單-1份」J9 的內容；I 欄進出站註記保留範例狀態。
+    cargo.api.setValue(`J${r1}`, cargoTemplateJ9);
   }
 
   // Template 1筆時為 A1:J15；每增加1筆貨櫃會增加2列。
