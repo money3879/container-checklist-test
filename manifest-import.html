@@ -3971,7 +3971,7 @@ async function exportManifest() {
     const meta = window._manifestMeta;
     const loc = currentLocationTab;
     const outBuf = await buildManifestXlsx(loc);
-    const filename = `${meta.ship.ship_name}_${meta.registration}_${loc}_艙單.xlsx`;
+    const filename = `${meta.registration}艙單+准單+貨櫃清單+運送單(${loc}).xlsx`;
     const blob = new Blob([outBuf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href=url; a.download=filename;
