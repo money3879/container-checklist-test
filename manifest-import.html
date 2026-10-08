@@ -1577,6 +1577,79 @@ async function buildManifestXlsx(loc) {
   const parser = new DOMParser();
   const serializer = new XMLSerializer();
 
+  // 運送單 N5 的顯示格式依該筆資料的「單位」設定。
+  // N5 本身仍維持 =進口艙單印1份!C16 公式；N6 保持 General，
+  // 因此 N5 可顯示「100PKG／100CTN」，N6 仍只顯示「100」。
+  // 只新增 N5 專用的 CellXf，不修改 Template 既有樣式，避免影響其他儲存格。
+  const stylesFile = zip.file('xl/styles.xml');
+  const stylesXml = stylesFile
+    ? parser.parseFromString(await stylesFile.async('text'), 'application/xml')
+    : null;
+  const transportN5StyleCache = new Map();
+
+  function getTransportN5StyleId(worksheetRoot, unit) {
+    if (!stylesXml) return null;
+    const n5 = Array.from(worksheetRoot.getElementsByTagNameNS(NS, 'c'))
+      .find(cell => cell.getAttribute('r') === 'N5');
+    if (!n5) return null;
+
+    const baseStyleId = Number(n5.getAttribute('s'));
+    if (!Number.isInteger(baseStyleId)) return null;
+
+    const displayUnit = String(unit || 'PKG').trim() || 'PKG';
+    if (displayUnit === 'PKG') return baseStyleId;
+    if (transportN5StyleCache.has(`${baseStyleId}|${displayUnit}`)) {
+      return transportN5StyleCache.get(`${baseStyleId}|${displayUnit}`);
+    }
+
+    const numFmts = stylesXml.getElementsByTagNameNS(NS, 'numFmts')[0]
+      || stylesXml.documentElement.insertBefore(
+        stylesXml.createElementNS(NS, 'numFmts'),
+        stylesXml.getElementsByTagNameNS(NS, 'fonts')[0] || null
+      );
+    const cellXfs = stylesXml.getElementsByTagNameNS(NS, 'cellXfs')[0];
+    if (!cellXfs) return null;
+
+    const formatCode = `####"${displayUnit.replace(/"/g, '""')}"`;
+    const existingFmt = Array.from(numFmts.getElementsByTagNameNS(NS, 'numFmt'))
+      .find(x => x.getAttribute('formatCode') === formatCode);
+    let numFmtId;
+    if (existingFmt) {
+      numFmtId = Number(existingFmt.getAttribute('numFmtId'));
+    } else {
+      let maxNumFmtId = 163;
+      for (const fmt of Array.from(numFmts.getElementsByTagNameNS(NS, 'numFmt'))) {
+        maxNumFmtId = Math.max(maxNumFmtId, Number(fmt.getAttribute('numFmtId')) || 0);
+      }
+      numFmtId = maxNumFmtId + 1;
+      const fmt = stylesXml.createElementNS(NS, 'numFmt');
+      fmt.setAttribute('numFmtId', String(numFmtId));
+      fmt.setAttribute('formatCode', formatCode);
+      numFmts.appendChild(fmt);
+      numFmts.setAttribute('count', String(numFmts.getElementsByTagNameNS(NS, 'numFmt').length));
+    }
+
+    const baseXf = cellXfs.children[baseStyleId];
+    if (!baseXf) return null;
+    const newXf = baseXf.cloneNode(true);
+    newXf.setAttribute('numFmtId', String(numFmtId));
+    newXf.setAttribute('applyNumberFormat', '1');
+    cellXfs.appendChild(newXf);
+    cellXfs.setAttribute('count', String(cellXfs.getElementsByTagNameNS(NS, 'xf').length));
+
+    const newStyleId = cellXfs.getElementsByTagNameNS(NS, 'xf').length - 1;
+    transportN5StyleCache.set(`${baseStyleId}|${displayUnit}`, newStyleId);
+    return newStyleId;
+  }
+
+  function applyTransportN5NumberFormat(worksheetRoot, unit) {
+    const styleId = getTransportN5StyleId(worksheetRoot, unit);
+    if (styleId == null) return;
+    const n5 = Array.from(worksheetRoot.getElementsByTagNameNS(NS, 'c'))
+      .find(cell => cell.getAttribute('r') === 'N5');
+    if (n5) n5.setAttribute('s', String(styleId));
+  }
+
   // Excel 的 worksheet xr:uid 是工作表本身的 GUID 識別值。
   // 複製工作表時不能把母版的 uid 一起複製，否則新舊工作表會共用同一個識別值。
   // 方案 A：保留 Template 原有且唯一的 uid；只有新建立的 worksheet 產生新的 GUID。
@@ -2702,6 +2775,7 @@ async function buildManifestXlsx(loc) {
     const root = newXml.documentElement;
     // 新工作表不可沿用「運送第1筆」母版的 xr:uid。
     assignNewWorksheetUid(root);
+    applyTransportN5NumberFormat(root, items[itemIndex]?.unit || 'PKG');
 
     // 公式來源列：
     // 第2筆 → 艙單17、貨櫃清單11
@@ -3473,6 +3547,7 @@ async function buildManifestXlsx(loc) {
     if (!file) continue;
 
     const xml = parser.parseFromString(await file.async('text'), 'application/xml');
+    applyTransportN5NumberFormat(xml.documentElement, items[itemIndex]?.unit || 'PKG');
     const manifestRow = finalManifestRowForItem(itemIndex);
     const cargoRow = finalCargoRowForItem(itemIndex);
 
@@ -3542,6 +3617,7 @@ async function buildManifestXlsx(loc) {
         const newXml = sourceTransportXml.cloneNode(true);
         // 每一張隱藏備用運送單也必須有自己的 worksheet xr:uid。
         assignNewWorksheetUid(newXml.documentElement);
+        applyTransportN5NumberFormat(newXml.documentElement, items[group.lastItemIndex]?.unit || 'PKG');
         for (const cell of Array.from(newXml.getElementsByTagNameNS(NS, 'c'))) {
           const f = cell.getElementsByTagNameNS(NS, 'f')[0];
           if (!f || f.textContent == null) continue;
@@ -3950,6 +4026,11 @@ async function buildManifestXlsx(loc) {
       if (ov.getAttribute('PartName') === '/xl/calcChain.xml') ov.parentNode.removeChild(ov);
     }
     zip.file('[Content_Types].xml', serializer.serializeToString(ctXmlTransport));
+  }
+
+  // 若本次有建立 N5 專用數字格式，將更新後的 styles.xml 寫回輸出檔。
+  if (stylesXml && transportN5StyleCache.size) {
+    zip.file('xl/styles.xml', serializer.serializeToString(stylesXml));
   }
 
   return await zip.generateAsync({type:'arraybuffer',compression:'DEFLATE'});
