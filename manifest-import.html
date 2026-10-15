@@ -1110,7 +1110,10 @@ function generatePreview() {
     manifestByLocation[l.location] = { items: [], ship2Name: l.ship2Name, locationDisplayName: l.locationDisplayName };
   });
 
-  const sealCounter = {}; // key: `${consigneeName}|${location}`
+  // 每筆收貨人管理資料可有不同台灣通知人及不同艙號起始值。
+  // 計數器必須依實際命中的 DB 資料分開，不能只用收貨人＋卸存地，
+  // 否則同公司不同通知人的第二筆資料會沿用第一筆的起始艙號。
+  const sealCounter = {}; // key: matched DB record + location
 
   function nextSealNo(value){
     const s=String(value??'').trim().toUpperCase();
@@ -1210,7 +1213,7 @@ function generatePreview() {
       });
     }
 
-    const counterKey = `${consigneeName}|${rowLocation}`;
+    const counterKey = `${match.id || `${normalizeConsigneeName(match.name || consigneeName)}|${normalizeNotifyName(match.taiwan_notify_name || '')}`}|${rowLocation}`;
     if (!(counterKey in sealCounter)) {
       sealCounter[counterKey] = match.seal_start;
     } else {
