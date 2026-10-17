@@ -1110,10 +1110,11 @@ function generatePreview() {
     manifestByLocation[l.location] = { items: [], ship2Name: l.ship2Name, locationDisplayName: l.locationDisplayName };
   });
 
-  // 每筆收貨人管理資料可有不同台灣通知人及不同艙號起始值。
-  // 計數器必須依實際命中的 DB 資料分開，不能只用收貨人＋卸存地，
-  // 否則同公司不同通知人的第二筆資料會沿用第一筆的起始艙號。
-  const sealCounter = {}; // key: matched DB record + location
+  // 同一收貨人＋卸存地中，不同台灣通知人仍各自命中正確的 DB 資料；
+  // 但若這些 DB 資料設定了相同的艙號起始值，代表共用同一組艙號流水號。
+  // 因此計數器依「收貨人＋卸存地＋艙號起始值」分組，而不是依 DB id 分組；
+  // 不同起始值（例如 1001 與 1020）仍會分開計數。
+  const sealCounter = {}; // key: normalized consignee + location + seal_start
 
   function nextSealNo(value){
     const s=String(value??'').trim().toUpperCase();
@@ -1213,7 +1214,8 @@ function generatePreview() {
       });
     }
 
-    const counterKey = `${match.id || `${normalizeConsigneeName(match.name || consigneeName)}|${normalizeNotifyName(match.taiwan_notify_name || '')}`}|${rowLocation}`;
+    const sealStartKey = String(match.seal_start ?? '').trim().toUpperCase();
+    const counterKey = `${normalizeConsigneeName(match.name || consigneeName)}|${rowLocation}|${sealStartKey}`;
     if (!(counterKey in sealCounter)) {
       sealCounter[counterKey] = match.seal_start;
     } else {
