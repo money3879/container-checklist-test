@@ -158,15 +158,13 @@ tr.done td { text-decoration:line-through; color:#999999 }
   </div>
 </div>
 
+<script src="./auth.js"></script>
 <script>
-const SB_URL = 'https://ruziacdggdfyvlbcjnan.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1emlhY2RnZ2RmeXZsYmNqbmFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NzE1OTEsImV4cCI6MjEwMDQ0NzU5MX0.3P7SzY2EfKtUTcuaBB0fMY0FOIdp_X3KmkfRnL8wuSg';
+const SB_URL = 'https://nvmhdvmwwxsfvhdmopyh.supabase.co';
+const SB_KEY = 'sb_publishable_xTrQflkrs7S01k1GfFExvw_9RDURAS5';
 
-// 登入保護
-(function checkAuth() {
-  const saved = localStorage.getItem('ctr-auth') || sessionStorage.getItem('ctr-auth');
-  if (!saved) { window.location.replace('index.html'); }
-})();
+// 歷史紀錄僅開放外場角色
+CTRAuth.requireRole('field', 'outside-login.html');
 
 let allSessions = [];
 

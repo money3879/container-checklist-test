@@ -102,18 +102,10 @@ main { padding:20px 16px }
   </div>
 </main>
 
+<script src="./auth.js"></script>
 <script>
-// 登入保護
-(function checkAuth() {
-  const saved = localStorage.getItem('ctr-auth') || sessionStorage.getItem('ctr-auth');
-  if (!saved) { window.location.replace('index.html'); return; }
-  try {
-    const auth = JSON.parse(saved);
-    if (!auth || !auth.username) throw new Error('invalid');
-  } catch(e) {
-    window.location.replace('index.html');
-  }
-})();
+// 艙單功能頁僅開放內場角色
+CTRAuth.requireRole('office', 'index.html');
 </script>
 </body>
 </html>

@@ -109,89 +109,30 @@ body {
   </div>
 </div>
 
+<script src="./auth.js"></script>
 <script>
-/* ══════════════════════════════
-   SUPABASE CONFIG
-══════════════════════════════ */
-const SB_URL = 'https://ruziacdggdfyvlbcjnan.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1emlhY2RnZ2RmeXZsYmNqbmFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NzE1OTEsImV4cCI6MjEwMDQ0NzU5MX0.3P7SzY2EfKtUTcuaBB0fMY0FOIdp_X3KmkfRnL8wuSg';
-
-// 簡易密碼雜湊（SHA-256），避免明碼比對
-async function hashPassword(pw) {
-  const enc = new TextEncoder().encode(pw);
-  const buf = await crypto.subtle.digest('SHA-256', enc);
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-}
-
-// enter 鍵送出
 window.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('password').addEventListener('keydown', e => {
-    if (e.key === 'Enter') doLogin();
-  });
-  document.getElementById('username').addEventListener('keydown', e => {
-    if (e.key === 'Enter') doLogin();
-  });
+  ['username','password'].forEach(id => document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); }));
 });
-
 async function doLogin() {
   const u = document.getElementById('username').value.trim();
   const p = document.getElementById('password').value;
   const errEl = document.getElementById('error-msg');
   const btnEl = document.querySelector('.login-btn');
-
-  if (!u || !p) {
-    errEl.textContent = '請輸入帳號和密碼';
-    return;
-  }
-
-  errEl.textContent = '';
-  btnEl.textContent = '登入中…';
-  btnEl.disabled = true;
-
+  if (!u || !p) { errEl.textContent = '請輸入帳號和密碼'; return; }
+  errEl.textContent = ''; btnEl.textContent = '登入中…'; btnEl.disabled = true;
   try {
-    const pwHash = await hashPassword(p);
-
-    const res = await fetch(
-      `${SB_URL}/rest/v1/users?username=eq.${encodeURIComponent(u)}&select=username,password_hash,display_name`,
-      {
-        headers: {
-          'apikey': SB_KEY,
-          'Authorization': 'Bearer ' + SB_KEY,
-        }
-      }
-    );
-
-    if (!res.ok) throw new Error('連線失敗');
-
-    const data = await res.json();
-
-    if (!data || data.length === 0 || data[0].password_hash !== pwHash) {
-      errEl.textContent = '帳號或密碼錯誤';
-      btnEl.textContent = '登入';
-      btnEl.disabled = false;
-      return;
+    const auth = await CTRAuth.login(u, p);
+    if (auth.role !== 'office') {
+      CTRAuth.clearSession();
+      errEl.textContent = '此為內場登入入口，請改用外場登入頁';
+      btnEl.textContent = '登入'; btnEl.disabled = false; return;
     }
-
-    const authData = {
-      username: u,
-      displayName: data[0].display_name || u,
-      loginAt: new Date().toISOString()
-    };
-
-    // 一律使用 sessionStorage：關閉瀏覽器分頁後就需要重新登入，不做「記住我」的長期保存
-    sessionStorage.setItem('ctr-auth', JSON.stringify(authData));
-
-    redirectToApp();
-
+    window.location.replace('console.html');
   } catch (e) {
-    errEl.textContent = '連線失敗，請檢查網路';
-    btnEl.textContent = '登入';
-    btnEl.disabled = false;
+    errEl.textContent = e.message || '登入失敗，請確認帳號密碼';
+    btnEl.textContent = '登入'; btnEl.disabled = false;
   }
-}
-
-function redirectToApp() {
-  window.location.replace('console.html');
 }
 </script>
 </body>

@@ -382,35 +382,17 @@ input[type="file"] { display:none }
 
 <div class="toast" id="toast"></div>
 
+<script src="./auth.js"></script>
 <script>
-/* ══════════════════════════════
-   登入保護：未登入導回 index.html
-══════════════════════════════ */
-let _authOk = true;
-(function checkAuth() {
-  const saved = localStorage.getItem('ctr-auth') || sessionStorage.getItem('ctr-auth');
-  if (!saved) {
-    _authOk = false;
-    window.location.replace('index.html');
-    return;
-  }
-  try {
-    const auth = JSON.parse(saved);
-    if (!auth || !auth.username) throw new Error('invalid');
-    window._currentUser = auth.username;
-  } catch(e) {
-    _authOk = false;
-    localStorage.removeItem('ctr-auth');
-    sessionStorage.removeItem('ctr-auth');
-    window.location.replace('index.html');
-  }
-})();
+/* 權限檢查：外場登入後才可使用 */
+const _authSession = CTRAuth.requireRole('field', 'outside-login.html');
+let _authOk = !!_authSession;
 
 /* ══════════════════════════════
    SUPABASE CONFIG（供修改密碼使用）
 ══════════════════════════════ */
-const SB_URL = 'https://ruziacdggdfyvlbcjnan.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1emlhY2RnZ2RmeXZsYmNqbmFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NzE1OTEsImV4cCI6MjEwMDQ0NzU5MX0.3P7SzY2EfKtUTcuaBB0fMY0FOIdp_X3KmkfRnL8wuSg';
+const SB_URL = 'https://nvmhdvmwwxsfvhdmopyh.supabase.co';
+const SB_KEY = 'sb_publishable_xTrQflkrs7S01k1GfFExvw_9RDURAS5';
 
 /* ══════════════════════════════
    STATE

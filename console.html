@@ -162,43 +162,20 @@ main { padding:20px 16px }
   </div>
 </div>
 
+<script src="./auth.js"></script>
 <script>
-const SB_URL = 'https://ruziacdggdfyvlbcjnan.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1emlhY2RnZ2RmeXZsYmNqbmFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NzE1OTEsImV4cCI6MjEwMDQ0NzU5MX0.3P7SzY2EfKtUTcuaBB0fMY0FOIdp_X3KmkfRnL8wuSg';
+const SB_URL = 'https://nvmhdvmwwxsfvhdmopyh.supabase.co';
+const SB_KEY = 'sb_publishable_xTrQflkrs7S01k1GfFExvw_9RDURAS5';
 
-// 登入保護：未登入就導回登入頁
-(function checkAuth() {
-  const saved = localStorage.getItem('ctr-auth') || sessionStorage.getItem('ctr-auth');
-  if (!saved) {
-    window.location.replace('index.html');
-    return;
-  }
-  try {
-    const auth = JSON.parse(saved);
-    if (!auth || !auth.username) throw new Error('invalid');
-    window._currentUser = auth.username;
-    document.getElementById('user-info').textContent = `使用者：${auth.displayName || auth.username}`;
-  } catch(e) {
-    localStorage.removeItem('ctr-auth');
-    sessionStorage.removeItem('ctr-auth');
-    window.location.replace('index.html');
-  }
-})();
+// 內場頁面只允許 office 角色
+const _authSession = CTRAuth.requireRole('office', 'index.html');
+if (_authSession) document.getElementById('user-info').textContent = `使用者：${_authSession.displayName || _authSession.username}`;
 
-function logout() {
-  localStorage.removeItem('ctr-auth');
-  sessionStorage.removeItem('ctr-auth');
-  window.location.replace('index.html');
-}
+function logout() { CTRAuth.logout('index.html'); }
 
 /* ══════════════════════════════
    CHANGE PASSWORD
 ══════════════════════════════ */
-async function hashPassword(pw) {
-  const enc = new TextEncoder().encode(pw);
-  const buf = await crypto.subtle.digest('SHA-256', enc);
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-}
 
 function openChangePwd() {
   document.getElementById('pwd-old').value = '';
@@ -218,81 +195,16 @@ async function submitPwdChange() {
   const confirmPw = document.getElementById('pwd-confirm').value;
   const errEl = document.getElementById('pwd-error');
   const btnEl = document.getElementById('pwd-submit-btn');
-
-  if (!oldPw || !newPw || !confirmPw) {
-    errEl.textContent = '請填寫所有欄位';
-    return;
-  }
-  if (newPw.length < 4) {
-    errEl.textContent = '新密碼至少需要 4 個字元';
-    return;
-  }
-  if (newPw !== confirmPw) {
-    errEl.textContent = '兩次輸入的新密碼不一致';
-    return;
-  }
-
-  errEl.textContent = '';
-  btnEl.textContent = '處理中…';
-  btnEl.disabled = true;
-
+  if (!oldPw || !newPw || !confirmPw) { errEl.textContent = '請填寫所有欄位'; return; }
+  if (newPw.length < 8) { errEl.textContent = '新密碼至少需要 8 個字元'; return; }
+  if (newPw !== confirmPw) { errEl.textContent = '兩次輸入的新密碼不一致'; return; }
+  errEl.textContent = ''; btnEl.textContent = '處理中…'; btnEl.disabled = true;
   try {
-    const username = window._currentUser;
-    const oldHash = await hashPassword(oldPw);
-
-    const checkRes = await fetch(
-      `${SB_URL}/rest/v1/users?username=eq.${encodeURIComponent(username)}&select=password_hash`,
-      { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } }
-    );
-    const checkData = await checkRes.json();
-
-    if (!checkData || checkData.length === 0 || checkData[0].password_hash !== oldHash) {
-      errEl.textContent = '目前密碼輸入錯誤';
-      btnEl.textContent = '確認修改';
-      btnEl.disabled = false;
-      return;
-    }
-
-    const newHash = await hashPassword(newPw);
-    const updateRes = await fetch(
-      `${SB_URL}/rest/v1/users?username=eq.${encodeURIComponent(username)}`,
-      {
-        method: 'PATCH',
-        headers: {
-          'apikey': SB_KEY,
-          'Authorization': 'Bearer ' + SB_KEY,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify({ password_hash: newHash })
-      }
-    );
-
-    if (!updateRes.ok) {
-      const errBody = await updateRes.text();
-      throw new Error('更新失敗：' + errBody);
-    }
-
-    const verifyRes = await fetch(
-      `${SB_URL}/rest/v1/users?username=eq.${encodeURIComponent(username)}&select=password_hash`,
-      { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } }
-    );
-    const verifyData = await verifyRes.json();
-    if (!verifyData || verifyData.length === 0 || verifyData[0].password_hash !== newHash) {
-      errEl.textContent = '更新未生效，可能是權限設定問題（RLS）';
-      btnEl.textContent = '確認修改';
-      btnEl.disabled = false;
-      return;
-    }
-
-    closePwdDlg();
-    alert('✅ 密碼已修改成功');
-
+    await CTRAuth.changePassword(oldPw, newPw);
+    closePwdDlg(); alert('✅ 密碼已修改成功');
   } catch (e) {
-    errEl.textContent = '連線失敗：' + (e.message || '請稍後再試');
-    btnEl.textContent = '確認修改';
-    btnEl.disabled = false;
-  }
+    errEl.textContent = e.message || '密碼修改失敗，請稍後再試';
+  } finally { btnEl.textContent = '確認修改'; btnEl.disabled = false; }
 }
 </script>
 </body>

@@ -448,22 +448,13 @@ main { padding:16px; padding-bottom:90px }
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="./auth.js"></script>
 <script>
-const SB_URL = 'https://ruziacdggdfyvlbcjnan.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1emlhY2RnZ2RmeXZsYmNqbmFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NzE1OTEsImV4cCI6MjEwMDQ0NzU5MX0.3P7SzY2EfKtUTcuaBB0fMY0FOIdp_X3KmkfRnL8wuSg';
+const SB_URL = 'https://nvmhdvmwwxsfvhdmopyh.supabase.co';
+const SB_KEY = 'sb_publishable_xTrQflkrs7S01k1GfFExvw_9RDURAS5';
 
-// 登入保護
-(function checkAuth() {
-  const saved = localStorage.getItem('ctr-auth') || sessionStorage.getItem('ctr-auth');
-  if (!saved) { window.location.replace('index.html'); return; }
-  try {
-    const auth = JSON.parse(saved);
-    if (!auth || !auth.username) throw new Error('invalid');
-    window._currentUser = auth.username;
-  } catch(e) {
-    window.location.replace('index.html');
-  }
-})();
+// 收貨人管理僅開放內場角色
+CTRAuth.requireRole('office', 'index.html');
 
 let rawRows = [];       // 原始資料（每筆是一個 name+location 組合）
 let grouped = [];        // 依 name 分組後的結構 [{name, address, locations:[{id,location,seal_start}]}]
