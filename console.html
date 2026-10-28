@@ -173,6 +173,17 @@ if (_authSession) document.getElementById('user-info').textContent = `使用者�
 
 function logout() { CTRAuth.logout('index.html'); }
 
+// 瀏覽器上一頁可能從快取還原已登出的內場畫面；保留畫面返回行為，
+// 但只要使用者在該畫面繼續點擊，就先確認登入狀態，避免操作受保護功能。
+document.addEventListener('click', function (event) {
+  const current = CTRAuth.readSession();
+  if (!current || !current.access_token || !current.userId || current.role !== 'office') {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    window.location.replace('index.html');
+  }
+}, true);
+
 /* ══════════════════════════════
    CHANGE PASSWORD
 ══════════════════════════════ */
