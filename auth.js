@@ -88,19 +88,24 @@
     return session;
   }
 
-  function requireRole(role, loginPage) {
+  function requireRoles(roles, loginPage) {
+    const allowedRoles = Array.isArray(roles) ? roles : [roles];
     const s = readSession();
     if (!s || !s.access_token || !s.userId) {
       window.location.replace(loginPage || 'index.html');
       return null;
     }
-    if (s.role !== role) {
+    if (!allowedRoles.includes(s.role)) {
       window.location.replace(s.role === 'field' ? 'container-checklist.html' : 'console.html');
       return null;
     }
     window._currentUser = s.username;
     window._currentRole = s.role;
     return s;
+  }
+
+  function requireRole(role, loginPage) {
+    return requireRoles([role], loginPage);
   }
 
   async function logout(redirect) {
@@ -127,5 +132,5 @@
     return true;
   }
 
-  window.CTRAuth = { login, requireRole, logout, changePassword, readSession, clearSession, URL, KEY };
+  window.CTRAuth = { login, requireRole, requireRoles, logout, changePassword, readSession, clearSession, URL, KEY };
 })();

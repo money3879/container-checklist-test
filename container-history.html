@@ -163,8 +163,8 @@ tr.done td { text-decoration:line-through; color:#999999 }
 const SB_URL = 'https://nvmhdvmwwxsfvhdmopyh.supabase.co';
 const SB_KEY = 'sb_publishable_xTrQflkrs7S01k1GfFExvw_9RDURAS5';
 
-// 歷史紀錄僅開放外場角色
-CTRAuth.requireRole('field', 'outside-login.html');
+// 內外場皆可查看歷史紀錄；只有內場能刪除。
+const _historyAuth = CTRAuth.requireRoles(['office', 'field'], 'outside-login.html');
 
 let allSessions = [];
 
@@ -248,6 +248,10 @@ function closeDetailOutside(e) {
 let pendingDeleteIdx = null;
 
 function askDelete(i) {
+  if (CTRAuth.readSession()?.role !== 'office') {
+    alert('無法刪除：外場帳號沒有刪除歷史紀錄的權限。');
+    return;
+  }
   pendingDeleteIdx = i;
   const s = allSessions[i];
   document.getElementById('delete-confirm-text').innerHTML =
@@ -262,21 +266,34 @@ function closeDeleteConfirm() {
 
 async function doDelete() {
   if (pendingDeleteIdx === null) return;
+  if (CTRAuth.readSession()?.role !== 'office') {
+    closeDeleteConfirm();
+    alert('無法刪除：外場帳號沒有刪除歷史紀錄的權限。');
+    return;
+  }
   const s = allSessions[pendingDeleteIdx];
   closeDeleteConfirm();
 
   try {
     const res = await fetch(`${SB_URL}/rest/v1/sessions?id=eq.${s.id}`, {
       method: 'DELETE',
-      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Prefer': 'return=representation' }
     });
-    if (!res.ok) throw new Error('刪除失敗');
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) throw new Error('目前帳號沒有刪除權限');
+      throw new Error('刪除失敗');
+    }
+    const deletedRows = await res.json().catch(() => []);
+    if (!Array.isArray(deletedRows) || deletedRows.length === 0) {
+      alert('無法刪除：資料庫未允許刪除此筆歷史紀錄，紀錄仍會保留。');
+      return;
+    }
 
-    // 從畫面上移除
+    // 只有資料庫確實回傳被刪除的資料時，才更新畫面。
     allSessions = allSessions.filter(x => x.id !== s.id);
     renderList();
   } catch(e) {
-    alert('刪除失敗，請檢查網路連線後再試一次');
+    alert((e.message || '刪除失敗') + '。歷史紀錄未從畫面移除，請確認權限或網路連線。');
   }
 }
 

@@ -240,7 +240,7 @@ input[type="file"] { display:none }
     <span class="app-title">對單系統</span>
     <button class="tbtn tbtn-import" onclick="openImport()">📥 匯入</button>
     <button class="tbtn" onclick="location.href='container-history.html'" style="color:#6a4fb0;border-color:rgba(106,79,176,.3)">📋 歷史</button>
-    <button class="tbtn" onclick="location.href='console.html'" style="color:#555555;border-color:rgba(0,0,0,.2)">🏠 回到首頁</button>
+    <button class="tbtn" id="home-btn" onclick="returnHome()" style="color:#555555;border-color:rgba(0,0,0,.2)">🏠 回到首頁</button>
   </div>
 
   <!-- row 2: voyage -->
@@ -385,7 +385,22 @@ input[type="file"] { display:none }
 <script src="./auth.js"></script>
 <script>
 /* 權限檢查：外場登入後才可使用 */
-const _authSession = CTRAuth.requireRole('field', 'outside-login.html');
+const _authSession = CTRAuth.requireRoles(['office', 'field'], 'outside-login.html');
+
+function returnHome() {
+  const session = CTRAuth.readSession();
+  if (session?.role === 'office') {
+    window.location.replace('console.html');
+  } else {
+    // 外場的首頁是外場登入入口；先登出，避免跳轉到內場頁面造成畫面閃現。
+    CTRAuth.logout('outside-login.html');
+  }
+}
+
+if (_authSession?.role === 'field') {
+  const homeButton = document.getElementById('home-btn');
+  if (homeButton) homeButton.textContent = '🚪 登出／回登入頁';
+}
 let _authOk = !!_authSession;
 
 /* ══════════════════════════════
