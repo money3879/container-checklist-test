@@ -66,15 +66,17 @@
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.access_token || !data.user?.id) throw new Error('帳號或密碼錯誤，或測試帳號尚未確認');
-    const profileRes = await nativeFetch(URL + '/rest/v1/profiles?select=id,username,display_name,role&id=eq.' + encodeURIComponent(data.user.id), {
+    // The public.users table is the role mapping for Supabase Auth users.
+    // Match by auth_user_id, not users.id (which is an independent row UUID).
+    const userRes = await nativeFetch(URL + '/rest/v1/users?select=id,username,display_name,role,auth_user_id&auth_user_id=eq.' + encodeURIComponent(data.user.id), {
       headers: { apikey: KEY, Authorization: 'Bearer ' + data.access_token }
     });
-    const profiles = await profileRes.json().catch(() => []);
-    if (!profileRes.ok || !profiles.length) {
+    const userRows = await userRes.json().catch(() => []);
+    if (!userRes.ok || !userRows.length) {
       await nativeFetch(URL + '/auth/v1/logout', { method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + data.access_token } }).catch(() => {});
       throw new Error('帳號尚未設定系統角色，請聯絡管理者');
     }
-    const profile = profiles[0];
+    const profile = userRows[0];
     if (profile.username !== normalized.replace(/@users\.container-checklist\.invalid$/, '')) {
       throw new Error('登入帳號與系統角色資料不一致');
     }

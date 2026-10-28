@@ -385,7 +385,7 @@ input[type="file"] { display:none }
 <script src="./auth.js"></script>
 <script>
 /* 權限檢查：外場登入後才可使用 */
-const _authSession = CTRAuth.requireRoles(['office', 'field'], 'outside-login.html');
+const _authSession = CTRAuth.requireRoles(['office', 'field'], 'index.html');
 
 function returnHome() {
   const session = CTRAuth.readSession();
@@ -393,7 +393,7 @@ function returnHome() {
     window.location.replace('console.html');
   } else {
     // 外場的首頁是外場登入入口；先登出，避免跳轉到內場頁面造成畫面閃現。
-    CTRAuth.logout('outside-login.html');
+    CTRAuth.logout('index.html');
   }
 }
 

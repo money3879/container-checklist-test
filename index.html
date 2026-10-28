@@ -123,12 +123,15 @@ async function doLogin() {
   errEl.textContent = ''; btnEl.textContent = '登入中…'; btnEl.disabled = true;
   try {
     const auth = await CTRAuth.login(u, p);
-    if (auth.role !== 'office') {
+    if (auth.role === 'office') {
+      window.location.replace('console.html');
+    } else if (auth.role === 'field') {
+      window.location.replace('container-checklist.html');
+    } else {
       CTRAuth.clearSession();
-      errEl.textContent = '此為內場登入入口，請改用外場登入頁';
-      btnEl.textContent = '登入'; btnEl.disabled = false; return;
+      errEl.textContent = '此帳號尚未設定有效的系統角色，請聯絡管理者';
+      btnEl.textContent = '登入'; btnEl.disabled = false;
     }
-    window.location.replace('console.html');
   } catch (e) {
     errEl.textContent = e.message || '登入失敗，請確認帳號密碼';
     btnEl.textContent = '登入'; btnEl.disabled = false;
