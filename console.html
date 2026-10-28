@@ -173,6 +173,17 @@ if (_authSession) document.getElementById('user-info').textContent = `使用者�
 
 function logout() { CTRAuth.logout('index.html'); }
 
+// 登出後若按瀏覽器上一頁，瀏覽器可能從 BFCache 還原此頁。
+// pageshow / popstate 都重新檢查登入狀態，已登出就立即回到統一登入頁。
+function guardOfficePageOnHistoryRestore() {
+  const current = CTRAuth.readSession();
+  if (!current || !current.access_token || !current.userId || current.role !== 'office') {
+    window.location.replace('index.html');
+  }
+}
+window.addEventListener('pageshow', guardOfficePageOnHistoryRestore);
+window.addEventListener('popstate', guardOfficePageOnHistoryRestore);
+
 // 瀏覽器上一頁可能從快取還原已登出的內場畫面；保留畫面返回行為，
 // 但只要使用者在該畫面繼續點擊，就先確認登入狀態，避免操作受保護功能。
 document.addEventListener('click', function (event) {

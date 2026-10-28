@@ -387,6 +387,17 @@ input[type="file"] { display:none }
 /* 權限檢查：外場登入後才可使用 */
 const _authSession = CTRAuth.requireRoles(['office', 'field'], 'index.html');
 
+// 防止登出後按瀏覽器上一頁，從 BFCache 還原已登入時的舊畫面。
+// 還原頁面或歷史紀錄切換時，若登入狀態已清除，立即回到統一登入頁。
+function guardChecklistPageOnHistoryRestore() {
+  const current = CTRAuth.readSession();
+  if (!current || !current.access_token || !current.userId || !['office', 'field'].includes(current.role)) {
+    window.location.replace('index.html');
+  }
+}
+window.addEventListener('pageshow', guardChecklistPageOnHistoryRestore);
+window.addEventListener('popstate', guardChecklistPageOnHistoryRestore);
+
 function returnHome() {
   const session = CTRAuth.readSession();
   if (session?.role === 'office') {
