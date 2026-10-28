@@ -166,6 +166,33 @@ const SB_KEY = 'sb_publishable_xTrQflkrs7S01k1GfFExvw_9RDURAS5';
 // 內外場皆可查看歷史紀錄；只有內場能刪除。
 const _historyAuth = CTRAuth.requireRoles(['office', 'field'], 'index.html');
 
+// 防止登出後按瀏覽器上一頁，從 BFCache 還原仍含有歷史資料的舊畫面。
+function guardHistoryPageOnRestore() {
+  const current = CTRAuth.readSession();
+  if (!current || !current.access_token || !current.userId || !['office', 'field'].includes(current.role)) {
+    // 先清除已顯示的歷史內容，再導回登入頁，避免舊畫面短暫保留。
+    const list = document.getElementById('list');
+    if (list) list.innerHTML = '<div class="empty">登入狀態已失效，正在返回登入頁…</div>';
+    const detail = document.getElementById('detail-overlay');
+    if (detail) detail.classList.remove('show');
+    const confirm = document.getElementById('delete-confirm');
+    if (confirm) confirm.classList.remove('show');
+    window.location.replace('index.html');
+  }
+}
+window.addEventListener('pageshow', guardHistoryPageOnRestore);
+window.addEventListener('popstate', guardHistoryPageOnRestore);
+
+// 即使瀏覽器恢復了舊畫面，只要登入狀態已失效，就不允許繼續操作歷史資料。
+document.addEventListener('click', function (event) {
+  const current = CTRAuth.readSession();
+  if (!current || !current.access_token || !current.userId || !['office', 'field'].includes(current.role)) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    guardHistoryPageOnRestore();
+  }
+}, true);
+
 let allSessions = [];
 
 async function loadHistory() {
@@ -297,7 +324,7 @@ async function doDelete() {
   }
 }
 
-loadHistory();
+if (_historyAuth) loadHistory();
 </script>
 </body>
 </html>
