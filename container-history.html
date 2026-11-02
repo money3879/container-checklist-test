@@ -172,7 +172,10 @@ function guardHistoryPageOnRestore() {
   if (!current || !current.access_token || !current.userId || !['office', 'field'].includes(current.role)) {
     // 先清除已顯示的歷史內容，再導回登入頁，避免舊畫面短暫保留。
     const list = document.getElementById('list');
-    if (list) list.innerHTML = '<div class="empty">登入狀態已失效，正在返回登入頁…</div>';
+    if (list) {
+      list.replaceChildren();
+      appendText(list, 'div', 'empty', '登入狀態已失效，正在返回登入頁…');
+    }
     const detail = document.getElementById('detail-overlay');
     if (detail) detail.classList.remove('show');
     const confirm = document.getElementById('delete-confirm');
@@ -205,37 +208,69 @@ async function loadHistory() {
     allSessions = await res.json();
     renderList();
   } catch(e) {
-    document.getElementById('list').innerHTML = '<div class="empty">⚠️ 載入失敗，請檢查網路連線</div>';
+    const list = document.getElementById('list');
+    list.replaceChildren();
+    appendText(list, 'div', 'empty', '⚠️ 載入失敗，請檢查網路連線');
   }
+}
+
+function appendText(parent, tagName, className, value) {
+  const element = document.createElement(tagName);
+  if (className) element.className = className;
+  element.textContent = value == null ? '' : String(value);
+  parent.appendChild(element);
+  return element;
+}
+
+function displayName(value) {
+  return String(value || '—').split('|')[0];
 }
 
 function renderList() {
   const listEl = document.getElementById('list');
+  listEl.replaceChildren();
+
   if (!allSessions.length) {
-    listEl.innerHTML = '<div class="empty">📭 目前沒有歷史紀錄<br><span style="font-size:.78rem">匯入 Excel 後會自動顯示在這裡</span></div>';
+    const empty = appendText(listEl, 'div', 'empty', '📭 目前沒有歷史紀錄');
+    const hint = appendText(empty, 'span', '', '匯入 Excel 後會自動顯示在這裡');
+    hint.style.fontSize = '.78rem';
     return;
   }
 
-  listEl.innerHTML = allSessions.map((s, i) => {
-    const total = s.rows ? s.rows.length : 0;
-    const done = s.rows ? s.rows.filter(r => r.done).length : 0;
+  allSessions.forEach((s, i) => {
+    const rows = Array.isArray(s.rows) ? s.rows : [];
+    const total = rows.length;
+    const done = rows.filter(r => r.done).length;
     const expiresIn = s.expires_at ? getTimeLeft(s.expires_at) : '';
-    return `
-      <div class="session-card" onclick="openDetail(${i})">
-        <button class="delete-btn" onclick="event.stopPropagation(); askDelete(${i})">🗑 刪除</button>
-        <div class="session-date">📅 ${s.date}</div>
-        <div class="session-voyage">${s.voyage || '（無航次資訊）'}</div>
-        <div class="session-meta">
-          <span>總計 <b>${total}</b> 筆</span>
-          <span>已對 <b>${done}</b> 筆</span>
-        </div>
-        <div class="session-meta" style="margin-top:2px">
-          <span>建立者：${(s.created_by || s.updated_by || '—').split('|')[0]}</span>
-          <span>更新者：${(s.updated_by || '—').split('|')[0]}</span>
-        </div>
-        <div class="session-expire">⏳ ${expiresIn}</div>
-      </div>`;
-  }).join('');
+    const card = document.createElement('div');
+    card.className = 'session-card';
+    card.addEventListener('click', () => openDetail(i));
+
+    const deleteButton = appendText(card, 'button', 'delete-btn', '🗑 刪除');
+    deleteButton.type = 'button';
+    deleteButton.addEventListener('click', event => {
+      event.stopPropagation();
+      askDelete(i);
+    });
+
+    appendText(card, 'div', 'session-date', `📅 ${s.date == null ? '' : s.date}`);
+    appendText(card, 'div', 'session-voyage', s.voyage || '（無航次資訊）');
+
+    const counts = appendText(card, 'div', 'session-meta', '');
+    const totalLabel = appendText(counts, 'span', '', '總計 ');
+    appendText(totalLabel, 'b', '', total);
+    totalLabel.append(' 筆');
+    const doneLabel = appendText(counts, 'span', '', '已對 ');
+    appendText(doneLabel, 'b', '', done);
+    doneLabel.append(' 筆');
+
+    const users = appendText(card, 'div', 'session-meta', '');
+    users.style.marginTop = '2px';
+    appendText(users, 'span', '', `建立者：${displayName(s.created_by || s.updated_by)}`);
+    appendText(users, 'span', '', `更新者：${displayName(s.updated_by)}`);
+    appendText(card, 'div', 'session-expire', `⏳ ${expiresIn}`);
+    listEl.appendChild(card);
+  });
 }
 
 function getTimeLeft(expiresAt) {
@@ -252,14 +287,27 @@ function openDetail(i) {
   document.getElementById('detail-sub').textContent = s.voyage || '（無航次資訊）';
 
   const tbody = document.getElementById('detail-tbody');
-  tbody.innerHTML = (s.rows || []).map(r => `
-    <tr class="${r.done ? 'done' : ''}">
-      <td class="cno-cell">${r.cno || ''}</td>
-      <td>${r.esn || '—'}${r.esn2 ? '<br>' + r.esn2 : ''}</td>
-      <td>${r.seal || '—'}</td>
-      <td>${r.loc || '—'}</td>
-      <td style="text-align:center">${r.done ? '✓ 已對' : '○ 未對'}${r.marked ? ' 🔵' : ''}</td>
-    </tr>`).join('');
+  tbody.replaceChildren();
+  (Array.isArray(s.rows) ? s.rows : []).forEach(r => {
+    const tr = document.createElement('tr');
+    if (r.done) tr.className = 'done';
+
+    appendText(tr, 'td', 'cno-cell', r.cno || '');
+
+    const sealCell = document.createElement('td');
+    sealCell.append(document.createTextNode(r.esn || '—'));
+    if (r.esn2) {
+      sealCell.appendChild(document.createElement('br'));
+      sealCell.append(document.createTextNode(String(r.esn2)));
+    }
+    tr.appendChild(sealCell);
+
+    appendText(tr, 'td', '', r.seal || '—');
+    appendText(tr, 'td', '', r.loc || '—');
+    const statusCell = appendText(tr, 'td', '', `${r.done ? '✓ 已對' : '○ 未對'}${r.marked ? ' 🔵' : ''}`);
+    statusCell.style.textAlign = 'center';
+    tbody.appendChild(tr);
+  });
 
   document.getElementById('detail-overlay').classList.add('show');
 }
@@ -281,8 +329,16 @@ function askDelete(i) {
   }
   pendingDeleteIdx = i;
   const s = allSessions[i];
-  document.getElementById('delete-confirm-text').innerHTML =
-    `確定要刪除 <b>${s.date}</b> 這筆紀錄嗎？<br>（${s.voyage || '無航次資訊'}）<br>刪除後無法復原。`;
+  const confirmText = document.getElementById('delete-confirm-text');
+  confirmText.replaceChildren(
+    document.createTextNode('確定要刪除 '),
+    Object.assign(document.createElement('b'), { textContent: s.date == null ? '' : String(s.date) }),
+    document.createTextNode(' 這筆紀錄嗎？'),
+    document.createElement('br'),
+    document.createTextNode(`（${s.voyage || '無航次資訊'}）`),
+    document.createElement('br'),
+    document.createTextNode('刪除後無法復原。')
+  );
   document.getElementById('delete-confirm').classList.add('show');
 }
 
