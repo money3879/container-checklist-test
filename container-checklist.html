@@ -712,12 +712,30 @@ function render() {
     return [r.cno, r.esn, r.esn2, r.seal, r.loc, r.seq].some(v => (v||'').toUpperCase().includes(q));
   });
 
-  /* highlight helper */
-  function hl(t) {
-    if (!q || !t) return t || '';
-    return t.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi'), '<mark>$1</mark>');
+  /* 安全文字顯示與搜尋標示：資料內容一律建立文字節點，不解析成 HTML */
+  function appendHighlightedText(parent, value, keyword) {
+    const text = String(value ?? '');
+    if (!keyword) {
+      parent.appendChild(document.createTextNode(text));
+      return;
+    }
+    const upperText = text.toUpperCase();
+    let cursor = 0;
+    let matchAt = upperText.indexOf(keyword, cursor);
+    while (matchAt !== -1) {
+      if (matchAt > cursor) {
+        parent.appendChild(document.createTextNode(text.slice(cursor, matchAt)));
+      }
+      const mark = document.createElement('mark');
+      mark.textContent = text.slice(matchAt, matchAt + keyword.length);
+      parent.appendChild(mark);
+      cursor = matchAt + keyword.length;
+      matchAt = upperText.indexOf(keyword, cursor);
+    }
+    if (cursor < text.length) {
+      parent.appendChild(document.createTextNode(text.slice(cursor)));
+    }
   }
-
   /* ── 後四碼重複偵測 ── */
   const tail4 = {};
   rows.forEach(r => { const t = (r.cno||'').slice(-4); if(t) tail4[t] = (tail4[t]||0)+1; });
@@ -731,24 +749,63 @@ function render() {
     else if (!seqKey) { isFirstSeq[r.id] = true; prevSeq = ' '; }
   });
 
-  tbody.innerHTML = vis.map(r => {
-    const isDup = tail4[(r.cno||'').slice(-4)] > 1;
-    const cnoHtml = r.cno
-      ? `<span class="c-cno-val">${hl(r.cno)}</span>`
-      : '';
-    const seqCellClass  = r.marked ? 'td-marked' : '';
-    const cnoCellClass  = (r.marked ? 'td-marked ' : '') + (isDup ? 'td-dup-cno' : '');
-    return `<tr id="r${r.id}" class="${r.done?'done':''}" onclick="askToggle(${r.id})">
-      <td class="${cnoCellClass}">${cnoHtml}</td>
-      <td>${r.esn2
-        ? `<span class="c-esn1">${hl(r.esn||'—')}</span><span class="c-esn2">${hl(r.esn2)}</span>`
-        : `<span class="c-esn1">${hl(r.esn||'—')}</span>`
-      }</td>
-      <td class="td-seal"><span class="c-seal-val">${hl(r.seal||'—')}</span></td>
-      <td><span class="c-loc-val">${hl(r.loc||'—')}</span></td>
-      <td>${r.size ? `<span class="sizetag">${r.size}</span>` : ''}</td>
-    </tr>`;
-  }).join('');
+  tbody.replaceChildren();
+  vis.forEach(r => {
+    const isDup = tail4[(r.cno || '').slice(-4)] > 1;
+    const tr = document.createElement('tr');
+    tr.id = `r${r.id}`;
+    if (r.done) tr.classList.add('done');
+    tr.addEventListener('click', () => askToggle(r.id));
+
+    const cnoCell = document.createElement('td');
+    if (r.marked) cnoCell.classList.add('td-marked');
+    if (isDup) cnoCell.classList.add('td-dup-cno');
+    if (r.cno) {
+      const cnoSpan = document.createElement('span');
+      cnoSpan.className = 'c-cno-val';
+      appendHighlightedText(cnoSpan, r.cno, q);
+      cnoCell.appendChild(cnoSpan);
+    }
+    tr.appendChild(cnoCell);
+
+    const esnCell = document.createElement('td');
+    const esnSpan = document.createElement('span');
+    esnSpan.className = 'c-esn1';
+    appendHighlightedText(esnSpan, r.esn || '—', q);
+    esnCell.appendChild(esnSpan);
+    if (r.esn2) {
+      const esn2Span = document.createElement('span');
+      esn2Span.className = 'c-esn2';
+      appendHighlightedText(esn2Span, r.esn2, q);
+      esnCell.appendChild(esn2Span);
+    }
+    tr.appendChild(esnCell);
+
+    const sealCell = document.createElement('td');
+    sealCell.className = 'td-seal';
+    const sealSpan = document.createElement('span');
+    sealSpan.className = 'c-seal-val';
+    appendHighlightedText(sealSpan, r.seal || '—', q);
+    sealCell.appendChild(sealSpan);
+    tr.appendChild(sealCell);
+
+    const locCell = document.createElement('td');
+    const locSpan = document.createElement('span');
+    locSpan.className = 'c-loc-val';
+    appendHighlightedText(locSpan, r.loc || '—', q);
+    locCell.appendChild(locSpan);
+    tr.appendChild(locCell);
+
+    const sizeCell = document.createElement('td');
+    if (r.size) {
+      const sizeSpan = document.createElement('span');
+      sizeSpan.className = 'sizetag';
+      sizeSpan.textContent = String(r.size);
+      sizeCell.appendChild(sizeSpan);
+    }
+    tr.appendChild(sizeCell);
+    tbody.appendChild(tr);
+  });
 
   /* stats */
   const total = rows.length, done = rows.filter(r => r.done).length;
@@ -869,7 +926,7 @@ function doReset() {
   closeReset();
   rows = rows.map(r => ({...r, done:false, marked:false}));
   save(); sbDebouncedUpdate(); lastCh = null;
-  document.getElementById('tbody').innerHTML = '';
+  document.getElementById('tbody').replaceChildren();
   render();
   toast('↺ 已重置，可重新開始對單', 'warn');
 }
@@ -1009,13 +1066,29 @@ const FIELDS = [
 ];
 
 function buildMap() {
-  document.getElementById('cmap-body').innerHTML = FIELDS.map(f => {
+  const tbody = document.getElementById('cmap-body');
+  tbody.replaceChildren();
+  FIELDS.forEach(f => {
     const auto = xlsH.find(h => f.hints.some(ht => h.toLowerCase().includes(ht.toLowerCase()))) || '';
-    const opts = ['（略過）', ...xlsH].map(h =>
-      `<option value="${h}"${h === auto ? ' selected' : ''}>${h}</option>`
-    ).join('');
-    return `<tr><td>${f.label}</td><td><select id="mp-${f.key}">${opts}</select></td></tr>`;
-  }).join('');
+    const tr = document.createElement('tr');
+    const labelCell = document.createElement('td');
+    labelCell.textContent = f.label;
+    tr.appendChild(labelCell);
+
+    const selectCell = document.createElement('td');
+    const select = document.createElement('select');
+    select.id = `mp-${f.key}`;
+    ['（略過）', ...xlsH].forEach(header => {
+      const option = document.createElement('option');
+      option.value = header;
+      option.textContent = header;
+      if (header === auto) option.selected = true;
+      select.appendChild(option);
+    });
+    selectCell.appendChild(select);
+    tr.appendChild(selectCell);
+    tbody.appendChild(tr);
+  });
   document.getElementById('cmap-wrap').style.display = 'block';
   document.getElementById('i-ok').disabled = false;
 }
