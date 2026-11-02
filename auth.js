@@ -10,13 +10,28 @@
   const EMAIL_SUFFIX = '@users.container-checklist.invalid';
   const nativeFetch = window.fetch.bind(window);
 
-  function readSession() {
-    try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null'); }
-    catch (_) { return null; }
+  function isFieldStandalone() {
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true);
   }
-  function writeSession(s) { sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
+  function readSession() {
+    try {
+      const current = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+      if (current) return current;
+      // 僅外場已安裝的 PWA 使用持久工作階段；一般網站仍維持原本 sessionStorage 行為。
+      if (isFieldStandalone()) {
+        const saved = JSON.parse(localStorage.getItem(SESSION_KEY + '-pwa-field') || 'null');
+        if (saved && saved.role === 'field') { sessionStorage.setItem(SESSION_KEY, JSON.stringify(saved)); return saved; }
+      }
+      return null;
+    } catch (_) { return null; }
+  }
+  function writeSession(s) {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(s));
+    if (isFieldStandalone() && s && s.role === 'field') localStorage.setItem(SESSION_KEY + '-pwa-field', JSON.stringify(s));
+  }
   function clearSession() {
     sessionStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_KEY + '-pwa-field');
     // Clear the legacy marker so it cannot be mistaken for a valid login.
     sessionStorage.removeItem('ctr-auth');
     localStorage.removeItem('ctr-auth');
