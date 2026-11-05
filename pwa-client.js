@@ -4,46 +4,52 @@
   const isStandalone = !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
   const isAndroid = /Android/i.test(navigator.userAgent);
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  // Android Chrome 的表格字體度量與 iOS 不同，僅在 Android 外場版增加儲存格上下留白。
+  // Android 外場手機：縮小表格字體與內距，完整換行顯示；不提供水平滑動。
   if (session && session.role === 'field' && isAndroid) {
     const style = document.createElement('style');
     style.id = 'android-table-spacing-fix';
     style.textContent = `
-      /* Android Chrome 的中文字型與等寬字型寬度較容易超出窄欄位；
-         取消文字省略/裁切，允許長編號在格內換行完整顯示。 */
-      .table-wrap { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
-      .table-wrap table { table-layout: fixed !important; width: 100% !important; }
+      .table-wrap { width:100% !important; max-width:100% !important; overflow-x:hidden !important; }
+      .table-wrap table { table-layout:fixed !important; width:100% !important; max-width:100% !important; }
+      .table-wrap col.c-cno { width:25% !important; }
+      .table-wrap col.c-esn { width:28% !important; }
+      .table-wrap col.c-seal { width:16% !important; }
+      .table-wrap col.c-loc { width:16% !important; }
+      .table-wrap col.c-size { width:36px !important; }
       .table-wrap thead th {
-        padding: 7px 3px !important;
-        line-height: 1.35 !important;
-        font-size: .68rem !important;
-        letter-spacing: 0 !important;
-        white-space: normal !important;
-        overflow: visible !important;
-        text-overflow: clip !important;
-        overflow-wrap: anywhere !important;
+        padding:4px 1px !important;
+        line-height:1.2 !important;
+        font-size:.57rem !important;
+        letter-spacing:-.2px !important;
+        white-space:normal !important;
+        overflow:hidden !important;
+        text-overflow:clip !important;
+        overflow-wrap:anywhere !important;
+        word-break:break-all !important;
       }
       .table-wrap tbody td {
-        padding: 7px 3px !important;
-        line-height: 1.4 !important;
-        vertical-align: middle !important;
-        overflow: visible !important;
+        padding:3px 1px !important;
+        line-height:1.22 !important;
+        vertical-align:middle !important;
+        overflow:hidden !important;
       }
       .table-wrap tbody td > span {
-        max-width: 100% !important;
-        line-height: 1.4 !important;
-        white-space: normal !important;
-        overflow: visible !important;
-        text-overflow: clip !important;
-        overflow-wrap: anywhere !important;
-        word-break: break-all !important;
+        display:block !important;
+        max-width:100% !important;
+        line-height:1.22 !important;
+        white-space:normal !important;
+        overflow:visible !important;
+        text-overflow:clip !important;
+        overflow-wrap:anywhere !important;
+        word-break:break-all !important;
       }
-      .table-wrap .c-cno-val { font-size: .86rem !important; letter-spacing: -.45px !important; }
-      .table-wrap .c-esn1 { font-size: .86rem !important; letter-spacing: -.45px !important; }
-      .table-wrap .c-esn2 { font-size: .82rem !important; letter-spacing: -.45px !important; }
-      .table-wrap .c-seal-val { font-size: .76rem !important; letter-spacing: -.35px !important; }
-      .table-wrap .c-seq-val { font-size: .68rem !important; }
-      .table-wrap .c-loc-val, .table-wrap .c-loc-rep { font-size: .62rem !important; overflow-wrap: anywhere !important; }
+      .table-wrap .c-cno-val { font-size:.68rem !important; letter-spacing:-.55px !important; }
+      .table-wrap .c-esn1 { font-size:.65rem !important; letter-spacing:-.55px !important; line-height:1.2 !important; }
+      .table-wrap .c-esn2 { font-size:.61rem !important; letter-spacing:-.55px !important; line-height:1.2 !important; }
+      .table-wrap .c-seal-val { font-size:.59rem !important; letter-spacing:-.5px !important; }
+      .table-wrap .c-seq-val { font-size:.57rem !important; letter-spacing:-.2px !important; }
+      .table-wrap .c-loc-val, .table-wrap .c-loc-rep { font-size:.55rem !important; letter-spacing:-.25px !important; }
+      .table-wrap .sizetag { font-size:.43rem !important; padding:1px 2px !important; }
     `;
     document.head.appendChild(style);
   }
