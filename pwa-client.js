@@ -4,23 +4,24 @@
   const isStandalone = !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
   const isAndroid = /Android/i.test(navigator.userAgent);
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  // Android 外場手機：縮小表格字體與內距，完整換行顯示；不提供水平滑動。
+  // Android 外場手機：整體縮小表格密度，讓五欄固定在手機畫面內完整呈現；不提供水平滑動。
   if (session && session.role === 'field' && isAndroid) {
     const style = document.createElement('style');
     style.id = 'android-table-spacing-fix';
     style.textContent = `
       .table-wrap { width:100% !important; max-width:100% !important; overflow-x:hidden !important; }
       .table-wrap table { table-layout:fixed !important; width:100% !important; max-width:100% !important; }
-      .table-wrap col.c-cno { width:25% !important; }
-      .table-wrap col.c-esn { width:28% !important; }
-      .table-wrap col.c-seal { width:16% !important; }
-      .table-wrap col.c-loc { width:16% !important; }
-      .table-wrap col.c-size { width:36px !important; }
+      /* 五欄寬度合計 100%，避免百分比加固定像素造成表格超出 */
+      .table-wrap col.c-cno  { width:23% !important; }
+      .table-wrap col.c-esn  { width:27% !important; }
+      .table-wrap col.c-seal { width:17% !important; }
+      .table-wrap col.c-loc  { width:21% !important; }
+      .table-wrap col.c-size { width:12% !important; }
       .table-wrap thead th {
-        padding:4px 1px !important;
-        line-height:1.2 !important;
-        font-size:.57rem !important;
-        letter-spacing:-.2px !important;
+        padding:2px 0 !important;
+        line-height:1.05 !important;
+        font-size:.48rem !important;
+        letter-spacing:-.35px !important;
         white-space:normal !important;
         overflow:hidden !important;
         text-overflow:clip !important;
@@ -28,28 +29,29 @@
         word-break:break-all !important;
       }
       .table-wrap tbody td {
-        padding:3px 1px !important;
-        line-height:1.22 !important;
+        padding:1px 0 !important;
+        line-height:1.08 !important;
         vertical-align:middle !important;
         overflow:hidden !important;
       }
       .table-wrap tbody td > span {
         display:block !important;
+        width:100% !important;
         max-width:100% !important;
-        line-height:1.22 !important;
+        line-height:1.08 !important;
         white-space:normal !important;
         overflow:visible !important;
         text-overflow:clip !important;
         overflow-wrap:anywhere !important;
         word-break:break-all !important;
       }
-      .table-wrap .c-cno-val { font-size:.68rem !important; letter-spacing:-.55px !important; }
-      .table-wrap .c-esn1 { font-size:.65rem !important; letter-spacing:-.55px !important; line-height:1.2 !important; }
-      .table-wrap .c-esn2 { font-size:.61rem !important; letter-spacing:-.55px !important; line-height:1.2 !important; }
-      .table-wrap .c-seal-val { font-size:.59rem !important; letter-spacing:-.5px !important; }
-      .table-wrap .c-seq-val { font-size:.57rem !important; letter-spacing:-.2px !important; }
-      .table-wrap .c-loc-val, .table-wrap .c-loc-rep { font-size:.55rem !important; letter-spacing:-.25px !important; }
-      .table-wrap .sizetag { font-size:.43rem !important; padding:1px 2px !important; }
+      .table-wrap .c-cno-val { font-size:.53rem !important; letter-spacing:-.7px !important; line-height:1.05 !important; }
+      .table-wrap .c-esn1 { font-size:.50rem !important; letter-spacing:-.65px !important; line-height:1.05 !important; }
+      .table-wrap .c-esn2 { font-size:.47rem !important; letter-spacing:-.65px !important; line-height:1.05 !important; }
+      .table-wrap .c-seal-val { font-size:.46rem !important; letter-spacing:-.65px !important; line-height:1.05 !important; }
+      .table-wrap .c-seq-val { font-size:.46rem !important; letter-spacing:-.35px !important; line-height:1.05 !important; }
+      .table-wrap .c-loc-val, .table-wrap .c-loc-rep { font-size:.44rem !important; letter-spacing:-.4px !important; line-height:1.05 !important; }
+      .table-wrap .sizetag { font-size:.38rem !important; padding:0 !important; line-height:1 !important; }
     `;
     document.head.appendChild(style);
   }
