@@ -9,9 +9,41 @@
     const style = document.createElement('style');
     style.id = 'android-table-spacing-fix';
     style.textContent = `
-      .table-wrap thead th { padding-top: 8px !important; padding-bottom: 8px !important; line-height: 1.4 !important; }
-      .table-wrap tbody td { padding-top: 11px !important; padding-bottom: 11px !important; line-height: 1.6 !important; }
-      .table-wrap tbody td > span { line-height: 1.6 !important; }
+      /* Android Chrome 的中文字型與等寬字型寬度較容易超出窄欄位；
+         取消文字省略/裁切，允許長編號在格內換行完整顯示。 */
+      .table-wrap { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+      .table-wrap table { table-layout: fixed !important; width: 100% !important; }
+      .table-wrap thead th {
+        padding: 7px 3px !important;
+        line-height: 1.35 !important;
+        font-size: .68rem !important;
+        letter-spacing: 0 !important;
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        overflow-wrap: anywhere !important;
+      }
+      .table-wrap tbody td {
+        padding: 7px 3px !important;
+        line-height: 1.4 !important;
+        vertical-align: middle !important;
+        overflow: visible !important;
+      }
+      .table-wrap tbody td > span {
+        max-width: 100% !important;
+        line-height: 1.4 !important;
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        overflow-wrap: anywhere !important;
+        word-break: break-all !important;
+      }
+      .table-wrap .c-cno-val { font-size: .86rem !important; letter-spacing: -.45px !important; }
+      .table-wrap .c-esn1 { font-size: .86rem !important; letter-spacing: -.45px !important; }
+      .table-wrap .c-esn2 { font-size: .82rem !important; letter-spacing: -.45px !important; }
+      .table-wrap .c-seal-val { font-size: .76rem !important; letter-spacing: -.35px !important; }
+      .table-wrap .c-seq-val { font-size: .68rem !important; }
+      .table-wrap .c-loc-val, .table-wrap .c-loc-rep { font-size: .62rem !important; overflow-wrap: anywhere !important; }
     `;
     document.head.appendChild(style);
   }
