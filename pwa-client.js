@@ -2,7 +2,19 @@
   'use strict';
   const session = window.CTRAuth && CTRAuth.readSession();
   const isStandalone = !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  const isAndroid = /Android/i.test(navigator.userAgent);
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  // Android Chrome 的表格字體度量與 iOS 不同，僅在 Android 外場版增加儲存格上下留白。
+  if (session && session.role === 'field' && isAndroid) {
+    const style = document.createElement('style');
+    style.id = 'android-table-spacing-fix';
+    style.textContent = `
+      .table-wrap thead th { padding-top: 8px !important; padding-bottom: 8px !important; line-height: 1.4 !important; }
+      .table-wrap tbody td { padding-top: 11px !important; padding-bottom: 11px !important; line-height: 1.6 !important; }
+      .table-wrap tbody td > span { line-height: 1.6 !important; }
+    `;
+    document.head.appendChild(style);
+  }
   // 只有外場角色在手機/平板使用時才啟用 PWA；內場與電腦網站不註冊 Service Worker。
   if (!session || session.role !== 'field' || !isMobile) return;
 
