@@ -235,33 +235,37 @@ input[type="file"] { display:none }
 .voyage-row { padding-top:2px !important; padding-bottom:2px !important; min-height:0 }
 .voyage-row .bar-voyage { font-size:.70rem; line-height:1.2; letter-spacing:0; padding:0; min-height:0 }
 
-/* 僅 Android 手機：表格五欄與上方操作按鈕依窄螢幕調整 */
+/* 僅 Android 手機：加強主要欄位可讀性，次要欄位保留空間給尺寸 */
 html.is-android .bar:first-child { gap:4px; padding:5px 6px }
 html.is-android .bar:first-child .app-title { font-size:.78rem; letter-spacing:1px; min-width:0 }
-html.is-android .bar:first-child .tbtn { padding:5px 6px; font-size:.68rem; border-radius:5px }
-html.is-android .bar:first-child .tbtn-import { padding-left:6px; padding-right:6px }
-html.is-android col.c-cno { width:30% }
-html.is-android col.c-esn { width:24% }
-html.is-android col.c-seal { width:18% }
-html.is-android col.c-loc { width:18% }
-html.is-android col.c-size { width:10% }
+html.is-android .bar:first-child .tbtn { padding:6px 7px; font-size:.72rem; border-radius:5px }
+html.is-android .bar:first-child .tbtn-import { padding-left:7px; padding-right:7px }
+/* 五欄比例：國際櫃號、海關封條加寬；大陸封條、卸存地縮窄；尺寸略加寬 */
+html.is-android col.c-cno { width:31% }
+html.is-android col.c-esn { width:27% }
+html.is-android col.c-seal { width:16% }
+html.is-android col.c-loc { width:12% }
+html.is-android col.c-size { width:14% }
 html.is-android thead th { padding:5px 2px; font-size:.62rem; line-height:1.15; letter-spacing:0; white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere }
 html.is-android thead th:first-child { padding-left:4px }
 html.is-android td { padding:6px 2px; overflow:visible; overflow-wrap:anywhere }
 html.is-android td:first-child { padding-left:4px }
-html.is-android .c-cno-val { font-size:.82rem; overflow-wrap:anywhere }
-html.is-android .c-esn1 { font-size:.78rem; overflow-wrap:anywhere }
-html.is-android .c-esn2 { font-size:.72rem; overflow-wrap:anywhere }
-html.is-android .c-seal-val { font-size:.66rem; white-space:normal; overflow-wrap:anywhere; word-break:break-word }
-html.is-android .c-loc-val, html.is-android .c-loc-rep { font-size:.58rem; white-space:normal; overflow-wrap:anywhere; word-break:break-all }
-html.is-android .sizetag { font-size:.56rem; padding:1px 1px; white-space:normal; overflow-wrap:anywhere }
+html.is-android .c-cno-val { font-size:.90rem; overflow-wrap:anywhere }
+html.is-android .c-esn1 { font-size:.88rem; line-height:1.35; overflow-wrap:anywhere; white-space:normal; word-break:break-word }
+html.is-android .c-esn2 { font-size:.82rem; line-height:1.35; overflow-wrap:anywhere; white-space:normal; word-break:break-word }
+html.is-android .c-seal-val { font-size:.62rem; white-space:normal; overflow-wrap:anywhere; word-break:break-word }
+html.is-android .c-loc-val, html.is-android .c-loc-rep { font-size:.52rem; line-height:1.2; white-space:normal; overflow-wrap:anywhere; word-break:break-all }
+html.is-android .sizetag { font-size:.60rem; line-height:1.2; padding:1px 2px; white-space:normal; overflow-wrap:anywhere }
 @media (max-width: 380px) {
   html.is-android .bar:first-child { gap:3px; padding-left:4px; padding-right:4px }
-  html.is-android .bar:first-child .tbtn { padding:4px 4px; font-size:.63rem }
+  html.is-android .bar:first-child .tbtn { padding:5px 5px; font-size:.68rem }
   html.is-android .bar:first-child .app-title { font-size:.72rem; letter-spacing:0 }
   html.is-android thead th { font-size:.59rem; padding-left:1px; padding-right:1px }
-  html.is-android .c-loc-val, html.is-android .c-loc-rep { font-size:.55rem }
-  html.is-android .sizetag { font-size:.53rem }
+  html.is-android .c-cno-val { font-size:.86rem }
+  html.is-android .c-esn1 { font-size:.82rem }
+  html.is-android .c-esn2 { font-size:.77rem }
+  html.is-android .c-loc-val, html.is-android .c-loc-rep { font-size:.49rem }
+  html.is-android .sizetag { font-size:.57rem }
 }
 </style>
 </head>
