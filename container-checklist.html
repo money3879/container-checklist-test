@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<script>if (/Android/i.test(navigator.userAgent)) document.documentElement.classList.add("is-android");</script>
 <title>貨櫃對單系統</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -230,41 +231,37 @@ tbody tr.done .c-seal-val { color:#111111 !important }
 mark { background:#ffe066; color:#7a4400; border-radius:2px }
 input[type="file"] { display:none }
 
+/* 所有裝置共用：航次資訊列縮小字體與上下間距 */
+.voyage-row { padding-top:2px !important; padding-bottom:2px !important; min-height:0 }
+.voyage-row .bar-voyage { font-size:.70rem; line-height:1.2; letter-spacing:0; padding:0; min-height:0 }
 
-/* Android／iPhone／電腦共用：五欄固定比例，窄螢幕優先保留櫃號與封條可讀性 */
-.bar-stats { display:flex; align-items:center; gap:clamp(7px, 2vw, 14px); padding:6px 10px; min-width:0 }
-.bar-stats .stat { flex:0 0 auto; white-space:nowrap; font-size:clamp(.72rem, 2.4vw, .82rem) }
-.bar-stats .stat b { font-size:clamp(.9rem, 3vw, 1.05rem) }
-.bar-stats #sync-status2 { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; font-size:clamp(.62rem, 2vw, .72rem) !important }
-col.c-cno { width:30% }
-col.c-esn { width:25% }
-col.c-seal { width:19% }
-col.c-loc { width:16% }
-col.c-size { width:10% }
-thead th { padding:6px 3px; font-size:clamp(.61rem, 2.1vw, .75rem); letter-spacing:0; white-space:normal; overflow-wrap:anywhere }
-thead th:first-child { padding-left:6px }
-td { padding:7px 3px; overflow-wrap:anywhere }
-td:first-child { padding-left:6px }
-.c-cno-val { font-size:clamp(.78rem, 3vw, 1.05rem) }
-.c-esn1 { font-size:clamp(.76rem, 2.8vw, 1.05rem) }
-.c-esn2 { font-size:clamp(.72rem, 2.6vw, 1rem) }
-.c-seal-val { font-size:clamp(.66rem, 2.3vw, .88rem); white-space:normal; overflow-wrap:anywhere }
-.c-loc-val, .c-loc-rep { font-size:clamp(.56rem, 1.9vw, .65rem); overflow-wrap:anywhere; word-break:break-word }
-.sizetag { font-size:clamp(.52rem, 1.8vw, .62rem); padding:1px 2px; white-space:normal; overflow-wrap:anywhere }
-@media (max-width: 420px) {
-  .bar-stats { gap:6px; padding-left:8px; padding-right:8px }
-  .bar-stats .stat { font-size:.68rem }
-  .bar-stats .stat b { font-size:.88rem; margin-right:0 }
-  .bar-stats #sync-status2 { font-size:.58rem !important }
-  col.c-cno { width:30% }
-  col.c-esn { width:25% }
-  col.c-seal { width:19% }
-  col.c-loc { width:16% }
-  col.c-size { width:10% }
-  thead th { font-size:.59rem; padding-left:2px; padding-right:2px }
-  td { padding-left:2px; padding-right:2px }
-  .c-loc-val { font-size:.55rem }
-  .sizetag { font-size:.5rem; padding:1px 1px }
+/* 僅 Android 手機：表格五欄與上方操作按鈕依窄螢幕調整 */
+html.is-android .bar:first-child { gap:4px; padding:5px 6px }
+html.is-android .bar:first-child .app-title { font-size:.78rem; letter-spacing:1px; min-width:0 }
+html.is-android .bar:first-child .tbtn { padding:5px 6px; font-size:.68rem; border-radius:5px }
+html.is-android .bar:first-child .tbtn-import { padding-left:6px; padding-right:6px }
+html.is-android col.c-cno { width:30% }
+html.is-android col.c-esn { width:24% }
+html.is-android col.c-seal { width:18% }
+html.is-android col.c-loc { width:18% }
+html.is-android col.c-size { width:10% }
+html.is-android thead th { padding:5px 2px; font-size:.62rem; line-height:1.15; letter-spacing:0; white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere }
+html.is-android thead th:first-child { padding-left:4px }
+html.is-android td { padding:6px 2px; overflow:visible; overflow-wrap:anywhere }
+html.is-android td:first-child { padding-left:4px }
+html.is-android .c-cno-val { font-size:.82rem; overflow-wrap:anywhere }
+html.is-android .c-esn1 { font-size:.78rem; overflow-wrap:anywhere }
+html.is-android .c-esn2 { font-size:.72rem; overflow-wrap:anywhere }
+html.is-android .c-seal-val { font-size:.66rem; white-space:normal; overflow-wrap:anywhere; word-break:break-word }
+html.is-android .c-loc-val, html.is-android .c-loc-rep { font-size:.58rem; white-space:normal; overflow-wrap:anywhere; word-break:break-all }
+html.is-android .sizetag { font-size:.56rem; padding:1px 1px; white-space:normal; overflow-wrap:anywhere }
+@media (max-width: 380px) {
+  html.is-android .bar:first-child { gap:3px; padding-left:4px; padding-right:4px }
+  html.is-android .bar:first-child .tbtn { padding:4px 4px; font-size:.63rem }
+  html.is-android .bar:first-child .app-title { font-size:.72rem; letter-spacing:0 }
+  html.is-android thead th { font-size:.59rem; padding-left:1px; padding-right:1px }
+  html.is-android .c-loc-val, html.is-android .c-loc-rep { font-size:.55rem }
+  html.is-android .sizetag { font-size:.53rem }
 }
 </style>
 </head>
@@ -281,12 +278,12 @@ td:first-child { padding-left:6px }
   </div>
 
   <!-- row 2: voyage -->
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 12px 5px;border-bottom:1px solid rgba(0,0,0,.10)">
+  <div class="voyage-row" style="display:flex;align-items:center;justify-content:space-between;padding:4px 12px 5px;border-bottom:1px solid rgba(0,0,0,.10)">
     <span class="bar-voyage" id="bar-voyage" style="margin:0;padding:0;border:none;min-height:auto">尚未匯入航次資訊</span>
     <span id="sync-status" style="font-size:.68rem;font-weight:600;white-space:nowrap"></span>
   </div>
 
-  <!-- row 3: stats：已對／剩餘／總計；右側同步狀態文字維持原樣 -->
+  <!-- row 3: 已對／剩餘／總計；右側狀態文字保留原設定 -->
   <div class="bar-stats">
     <div class="stat stat-done"><b id="s-done">0</b> 已對</div>
     <div class="stat stat-remaining"><b id="s-remaining">0</b> 剩餘</div>
