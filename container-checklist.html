@@ -3,7 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<script>if (/Android/i.test(navigator.userAgent)) document.documentElement.classList.add("is-android");</script>
+<script>
+(function () {
+  // Android 手機介面標記：同時檢查 UA 與行動裝置平台，避免部分 Android WebView 未套用樣式。
+  var ua = navigator.userAgent || '';
+  var platform = navigator.platform || '';
+  var isAndroid = /Android/i.test(ua) || (/Linux/i.test(platform) && navigator.maxTouchPoints > 0 && /Mobile/i.test(ua));
+  if (isAndroid) document.documentElement.classList.add('is-android');
+})();
+</script>
 <title>貨櫃對單系統</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -252,22 +260,36 @@ html.is-android thead th { padding:6px 5px; font-size:.65rem; line-height:normal
 html.is-android thead th:first-child { padding-left:5px }
 html.is-android td { padding:6px 5px; overflow:visible; overflow-wrap:anywhere; font-size:.78rem }
 html.is-android td:first-child { padding-left:5px }
-/* Android 五欄：只調整資料資訊字體，不更動表頭標題 */
-html.is-android .c-cno-val { font-size:1.9rem }
-html.is-android .c-esn1,
-html.is-android .c-esn2 { font-size:1.9rem }
-html.is-android .c-seal-val { font-size:1.6rem }
-html.is-android .c-loc-val,
-html.is-android .c-loc-rep { font-size:.5rem }
-html.is-android .sizetag { font-size:.5rem }
-html.is-android .c-cno-val { line-height:1.25; overflow-wrap:anywhere }
-/* 海關封條有兩筆時仍由兩個獨立 span 上下排列 */
-html.is-android .c-esn1,
-html.is-android .c-esn2 { line-height:1.3; overflow-wrap:anywhere; white-space:normal; word-break:break-word }
-html.is-android .c-seal-val { line-height:1.2; white-space:normal; overflow-wrap:anywhere; word-break:break-word }
-html.is-android .c-loc-val,
-html.is-android .c-loc-rep { line-height:1.15; white-space:normal; overflow-wrap:anywhere; word-break:break-word }
-html.is-android .sizetag { line-height:1.2; padding:1px 4px; white-space:normal; overflow-wrap:anywhere }
+/* Android 五欄：直接鎖定資料內容元素，避免一般 td/span 規則蓋掉字體設定 */
+html.is-android .table-wrap table tbody td .c-cno-val {
+  font-size:1.9rem !important; line-height:1.2 !important;
+  display:block !important; white-space:normal !important;
+  overflow:visible !important; overflow-wrap:anywhere !important; word-break:break-word !important;
+}
+/* 海關封條兩筆資料使用兩個獨立區塊，強制上下排列 */
+html.is-android .table-wrap table tbody td .c-esn1,
+html.is-android .table-wrap table tbody td .c-esn2 {
+  font-size:1.9rem !important; line-height:1.2 !important;
+  display:block !important; width:100% !important;
+  white-space:normal !important; overflow:visible !important;
+  overflow-wrap:anywhere !important; word-break:break-word !important;
+}
+html.is-android .table-wrap table tbody td .c-seal-val {
+  font-size:1.6rem !important; line-height:1.2 !important;
+  display:block !important; white-space:normal !important;
+  overflow:visible !important; overflow-wrap:anywhere !important; word-break:break-word !important;
+}
+html.is-android .table-wrap table tbody td .c-loc-val,
+html.is-android .table-wrap table tbody td .c-loc-rep {
+  font-size:.5rem !important; line-height:1.15 !important;
+  display:block !important; white-space:normal !important;
+  overflow-wrap:anywhere !important; word-break:break-word !important;
+}
+html.is-android .table-wrap table tbody td .sizetag {
+  font-size:.5rem !important; line-height:1.2 !important;
+  display:inline-block !important; white-space:normal !important;
+  overflow-wrap:anywhere !important; padding:1px 4px !important;
+}
 @media (max-width: 380px) {
   html.is-android .bar:first-child { gap:3px; padding-left:4px; padding-right:4px }
   html.is-android .bar:first-child .tbtn { padding:6px 7px; font-size:.74rem }
