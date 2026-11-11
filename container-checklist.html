@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-TW" style="background:#ffffff;color-scheme:light">
 <head>
 <meta charset="UTF-8">
@@ -243,55 +243,60 @@ input[type="file"] { display:none }
 .voyage-row { padding-top:2px !important; padding-bottom:2px !important; min-height:0 }
 .voyage-row .bar-voyage { font-size:.70rem; line-height:1.2; letter-spacing:0; padding:0; min-height:0 }
 
-/* 僅 Android 手機：提高國際櫃號與海關封條辨識度，縮小卸存地並保留尺寸欄 */
+/* 僅 Android 手機：明確鎖定五欄寬度、文字縮放及資料列高度 */
+html.is-android, html.is-android body {
+  -webkit-text-size-adjust: none !important;
+  text-size-adjust: none !important;
+}
 html.is-android .bar:first-child { gap:4px; padding:5px 6px }
 html.is-android .bar:first-child .app-title { font-size:.78rem; letter-spacing:1px; min-width:0 }
-/* 頂端操作按鈕比前版稍大，仍維持單行 */
 html.is-android .bar:first-child .tbtn { padding:7px 9px; font-size:.78rem; border-radius:5px }
 html.is-android .bar:first-child .tbtn-import { padding-left:9px; padding-right:9px }
-/* Android 五欄：國際櫃號、海關封條加寬；卸存地、尺寸縮窄 */
-html.is-android table { table-layout:fixed }
-html.is-android col.c-cno  { width:38% }
-html.is-android col.c-esn  { width:31% }
-html.is-android col.c-seal { width:21% }
-html.is-android col.c-loc  { width:5% }
-html.is-android col.c-size { width:5% }
-html.is-android thead th { padding:6px 5px; font-size:.65rem; line-height:normal; letter-spacing:0; white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere }
-html.is-android thead th:first-child { padding-left:5px }
-/* Android 對單資料列稍微加高，讓櫃號等資訊更容易閱讀 */
-html.is-android .table-wrap table tbody td { padding-top:17px; padding-bottom:17px }
-html.is-android td { padding:6px 5px; overflow:visible; overflow-wrap:anywhere; font-size:.78rem }
-html.is-android td:first-child { padding-left:5px }
-/* Android 五欄：直接鎖定資料內容元素，避免一般 td/span 規則蓋掉字體設定 */
+
+/* 欄位順序：國際櫃號／海關封條／大陸封條／卸存地／尺寸 */
+html.is-android .table-wrap { width:100%; overflow-x:hidden }
+html.is-android .table-wrap table {
+  width:100% !important; min-width:0 !important; table-layout:fixed !important;
+}
+html.is-android .table-wrap table col.c-cno  { width:38% !important }
+html.is-android .table-wrap table col.c-esn  { width:31% !important }
+html.is-android .table-wrap table col.c-seal { width:22% !important }
+html.is-android .table-wrap table col.c-loc  { width:4% !important }
+html.is-android .table-wrap table col.c-size { width:5% !important }
+html.is-android .table-wrap table thead th { padding:6px 2px !important; font-size:.62rem !important; line-height:1.1 !important; letter-spacing:0 !important; white-space:normal !important; overflow:visible !important; text-overflow:clip !important; overflow-wrap:anywhere !important }
+html.is-android .table-wrap table thead th:first-child { padding-left:5px !important }
+/* 用較大的上下 padding 明確增加每筆資料列高度 */
+html.is-android .table-wrap table tbody tr > td {
+  box-sizing:border-box !important; padding-top:22px !important; padding-bottom:22px !important;
+  padding-left:3px !important; padding-right:3px !important;
+  vertical-align:middle !important;
+}
+html.is-android .table-wrap table tbody td { font-size:.78rem !important; overflow:visible !important; }
+html.is-android .table-wrap table tbody td:first-child { padding-left:5px !important }
 html.is-android .table-wrap table tbody td .c-cno-val {
-  font-size:.8rem !important; line-height:1.2 !important;
-  display:block !important; white-space:nowrap !important;
-  overflow:hidden !important; text-overflow:ellipsis !important;
+  font-size:.8rem !important; line-height:1.2 !important; display:block !important;
+  white-space:nowrap !important; overflow:hidden !important; text-overflow:ellipsis !important;
   overflow-wrap:normal !important; word-break:keep-all !important;
 }
-/* 海關封條兩筆資料使用兩個獨立區塊，強制上下排列 */
 html.is-android .table-wrap table tbody td .c-esn1,
 html.is-android .table-wrap table tbody td .c-esn2 {
-  font-size:1.0rem !important; line-height:1.2 !important;
-  display:block !important; width:100% !important;
-  white-space:normal !important; overflow:visible !important;
-  overflow-wrap:anywhere !important; word-break:break-word !important;
+  font-size:1rem !important; line-height:1.2 !important; display:block !important; width:100% !important;
+  white-space:normal !important; overflow:visible !important; overflow-wrap:anywhere !important; word-break:break-word !important;
 }
 html.is-android .table-wrap table tbody td .c-seal-val {
-  font-size:.8rem !important; line-height:1.2 !important;
-  display:block !important; white-space:normal !important;
-  overflow:visible !important; overflow-wrap:anywhere !important; word-break:break-word !important;
+  font-size:.8rem !important; line-height:1.2 !important; display:block !important;
+  white-space:normal !important; overflow:visible !important; overflow-wrap:anywhere !important; word-break:break-word !important;
 }
+/* 卸存地欄：4% 欄寬，字體再縮小，並取消 Android 瀏覽器自動放大 */
 html.is-android .table-wrap table tbody td .c-loc-val,
 html.is-android .table-wrap table tbody td .c-loc-rep {
-  font-size:.38rem !important; line-height:1.15 !important;
-  display:block !important; white-space:normal !important;
-  overflow-wrap:anywhere !important; word-break:break-word !important;
+  font-size:.30rem !important; line-height:1.05 !important; display:block !important;
+  white-space:normal !important; overflow:hidden !important; overflow-wrap:anywhere !important;
+  word-break:break-all !important; max-width:100% !important;
 }
 html.is-android .table-wrap table tbody td .sizetag {
-  font-size:.3rem !important; line-height:1.2 !important;
-  display:inline-block !important; white-space:normal !important;
-  overflow-wrap:anywhere !important; padding:1px 4px !important;
+  font-size:.28rem !important; line-height:1.1 !important; display:inline-block !important;
+  white-space:normal !important; overflow-wrap:anywhere !important; padding:1px 2px !important;
 }
 @media (max-width: 380px) {
   html.is-android .bar:first-child { gap:3px; padding-left:4px; padding-right:4px }
@@ -533,6 +538,7 @@ const SAMPLE = [
    INIT
 ══════════════════════════════ */
 window.addEventListener('DOMContentLoaded', () => {
+  if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('is-android');
   if (!_authOk) return;
   try {
     const s = localStorage.getItem('ctr4-rows');
