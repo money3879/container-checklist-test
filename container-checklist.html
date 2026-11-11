@@ -262,9 +262,10 @@ html.is-android td { padding:6px 5px; overflow:visible; overflow-wrap:anywhere; 
 html.is-android td:first-child { padding-left:5px }
 /* Android 五欄：直接鎖定資料內容元素，避免一般 td/span 規則蓋掉字體設定 */
 html.is-android .table-wrap table tbody td .c-cno-val {
-  font-size:1.0rem !important; line-height:1.2 !important;
-  display:block !important; white-space:normal !important;
-  overflow:visible !important; overflow-wrap:anywhere !important; word-break:break-word !important;
+  font-size:.9rem !important; line-height:1.2 !important;
+  display:block !important; white-space:nowrap !important;
+  overflow:hidden !important; text-overflow:ellipsis !important;
+  overflow-wrap:normal !important; word-break:normal !important;
 }
 /* 海關封條兩筆資料使用兩個獨立區塊，強制上下排列 */
 html.is-android .table-wrap table tbody td .c-esn1,
