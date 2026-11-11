@@ -253,16 +253,16 @@ html.is-android .bar:first-child .app-title { font-size:.78rem; letter-spacing:1
 html.is-android .bar:first-child .tbtn { padding:7px 9px; font-size:.78rem; border-radius:5px }
 html.is-android .bar:first-child .tbtn-import { padding-left:9px; padding-right:9px }
 
-/* Android 五欄指定比例：國際櫃號35%／海關封條31%／大陸封條21%／卸存地8%／尺寸5% */
+/* Android 五欄指定比例：國際櫃號32%／海關封條31%／大陸封條20%／卸存地10%／尺寸7% */
 html.is-android .table-wrap { width:100%; overflow-x:hidden }
 html.is-android .table-wrap table {
   width:100% !important; min-width:0 !important; table-layout:fixed !important;
 }
-html.is-android .table-wrap table col.c-cno  { width:35% !important }
+html.is-android .table-wrap table col.c-cno  { width:32% !important }
 html.is-android .table-wrap table col.c-esn  { width:31% !important }
-html.is-android .table-wrap table col.c-seal { width:21% !important }
-html.is-android .table-wrap table col.c-loc  { width:8% !important }
-html.is-android .table-wrap table col.c-size { width:5% !important }
+html.is-android .table-wrap table col.c-seal { width:20% !important }
+html.is-android .table-wrap table col.c-loc  { width:10% !important }
+html.is-android .table-wrap table col.c-size { width:7% !important }
 html.is-android .table-wrap table thead th { padding:6px 2px !important; font-size:.62rem !important; line-height:1.1 !important; letter-spacing:0 !important; white-space:normal !important; overflow:visible !important; text-overflow:clip !important; overflow-wrap:anywhere !important }
 html.is-android .table-wrap table thead th:first-child { padding-left:5px !important }
 /* 用較大的上下 padding 明確增加每筆資料列高度 */
@@ -287,7 +287,7 @@ html.is-android .table-wrap table tbody td .c-seal-val {
   font-size:.8rem !important; line-height:1.2 !important; display:block !important;
   white-space:normal !important; overflow:visible !important; overflow-wrap:anywhere !important; word-break:break-word !important;
 }
-/* 卸存地欄：4% 欄寬，字體再縮小，並取消 Android 瀏覽器自動放大 */
+/* Android 卸存地欄：10% 欄寬，字體 0.5rem */
 html.is-android .table-wrap table tbody td .c-loc-val,
 html.is-android .table-wrap table tbody td .c-loc-rep {
   font-size:.5rem !important; line-height:1.05 !important; display:block !important;
