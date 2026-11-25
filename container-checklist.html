@@ -195,6 +195,14 @@ tbody tr.done .c-seal-val { color:#111111 !important }
 #dlg-reset   { z-index:400 }
 /* toggle dialog — z-index 500, always on top; vertical position set dynamically by JS */
 #dlg-toggle  { z-index:500; align-items:flex-start }
+#dlg-password { z-index:600 }
+.password-box { max-width:360px; text-align:left }
+.password-box h3 { text-align:center; margin-bottom:14px }
+.password-field { display:block; margin:0 0 11px; font-size:.78rem; font-weight:700; color:#444 }
+.password-field input { display:block; width:100%; margin-top:5px; padding:11px 10px; border:1px solid rgba(0,0,0,.2); border-radius:7px; background:#fff; color:#111; font:inherit; font-size:.95rem; outline:none }
+.password-field input:focus { border-color:#2255aa }
+#password-error { min-height:18px; margin:2px 0 10px; color:#cc2222; font-size:.76rem; line-height:1.4 }
+#password-submit:disabled { opacity:.6; cursor:wait }
 
 /* ════════ IMPORT OVERLAY ════════ */
 .import-overlay {
@@ -324,6 +332,7 @@ html.is-android .table-wrap table tbody td .sizetag {
     <span class="app-title">對單系統</span>
     <button class="tbtn tbtn-import" onclick="openImport()">📥 匯入</button>
     <button class="tbtn" onclick="location.href='container-history.html'" style="color:#6a4fb0;border-color:rgba(106,79,176,.3)">📋 歷史</button>
+    <button class="tbtn" id="change-password-btn" onclick="openPasswordDialog()" style="color:#2255aa;border-color:rgba(34,85,170,.3)">🔑 修改密碼</button>
     <button class="tbtn" id="home-btn" onclick="returnHome()" style="color:#555555;border-color:rgba(0,0,0,.2)">🏠 回到首頁</button>
   </div>
 
@@ -437,6 +446,27 @@ html.is-android .table-wrap table tbody td .sizetag {
   </div>
 </div>
 
+<!-- ════ CHANGE PASSWORD DIALOG ════ -->
+<div class="dlg-overlay" id="dlg-password" onclick="passwordOutside(event)">
+  <div class="dlg-box password-box" role="dialog" aria-modal="true" aria-labelledby="password-title">
+    <h3 id="password-title">🔑 修改登入密碼</h3>
+    <label class="password-field">目前密碼
+      <input id="password-current" type="password" autocomplete="current-password" placeholder="輸入目前密碼" required>
+    </label>
+    <label class="password-field">新密碼（至少 8 個字元）
+      <input id="password-new" type="password" autocomplete="new-password" minlength="8" placeholder="輸入新密碼" required>
+    </label>
+    <label class="password-field">再次輸入新密碼
+      <input id="password-confirm" type="password" autocomplete="new-password" minlength="8" placeholder="再次輸入新密碼" required>
+    </label>
+    <div id="password-error" aria-live="polite"></div>
+    <div class="dlg-btns">
+      <button class="dlg-cancel" type="button" onclick="closePasswordDialog()">取消</button>
+      <button class="dlg-ok blue" id="password-submit" type="button" onclick="submitPasswordChange()">確認修改</button>
+    </div>
+  </div>
+</div>
+
 <!-- ════ IMPORT OVERLAY ════ -->
 <div class="import-overlay" id="import-overlay" onclick="importOutside(event)">
   <div class="ipanel">
@@ -494,7 +524,7 @@ function returnHome() {
 
 if (_authSession?.role === 'field') {
   const homeButton = document.getElementById('home-btn');
-  if (homeButton) homeButton.textContent = '🚪 登出／回登入頁';
+  if (homeButton) homeButton.textContent = '🚪 登出';
 }
 let _authOk = !!_authSession;
 
@@ -1220,6 +1250,47 @@ async function doImport() {
   showSyncStatus('☁️ 正在建立雲端紀錄…');
   await sbUploadFull();
   showSyncStatus('☁️ 雲端紀錄已就緒');
+}
+
+/* ══════════════════════════════
+   CHANGE PASSWORD
+══════════════════════════════ */
+function openPasswordDialog() {
+  const overlay = document.getElementById('dlg-password');
+  document.getElementById('password-current').value = '';
+  document.getElementById('password-new').value = '';
+  document.getElementById('password-confirm').value = '';
+  document.getElementById('password-error').textContent = '';
+  overlay.classList.add('show');
+  setTimeout(() => document.getElementById('password-current').focus(), 30);
+}
+function closePasswordDialog() {
+  document.getElementById('dlg-password').classList.remove('show');
+}
+function passwordOutside(event) {
+  if (event.target.id === 'dlg-password') closePasswordDialog();
+}
+async function submitPasswordChange() {
+  const current = document.getElementById('password-current').value;
+  const next = document.getElementById('password-new').value;
+  const confirm = document.getElementById('password-confirm').value;
+  const error = document.getElementById('password-error');
+  const submit = document.getElementById('password-submit');
+  error.textContent = '';
+  if (!current) { error.textContent = '請輸入目前密碼'; return; }
+  if (next.length < 8) { error.textContent = '新密碼至少需要 8 個字元'; return; }
+  if (next !== confirm) { error.textContent = '兩次輸入的新密碼不一致'; return; }
+  if (next === current) { error.textContent = '新密碼不可與目前密碼相同'; return; }
+  submit.disabled = true; submit.textContent = '處理中…';
+  try {
+    await CTRAuth.changePassword(current, next);
+    closePasswordDialog();
+    toast('✅ 密碼修改成功');
+  } catch (err) {
+    error.textContent = err?.message || '密碼修改失敗，請稍後再試';
+  } finally {
+    submit.disabled = false; submit.textContent = '確認修改';
+  }
 }
 
 /* ══════════════════════════════
