@@ -58,6 +58,12 @@ body {
   font-size:.95rem; font-family:inherit; color:var(--txt);
   outline:none; transition:border-color .2s;
   background:#ffffff;
+  /* iOS 主畫面 PWA：明確保留原生輸入、觸控與文字選取能力 */
+  -webkit-appearance:none; appearance:none;
+  -webkit-user-select:text; user-select:text;
+  -webkit-touch-callout:default;
+  pointer-events:auto; touch-action:manipulation;
+  position:relative; z-index:1;
 }
 .field input:focus { border-color:var(--cyan) }
 
@@ -91,12 +97,12 @@ body {
   <div class="subtitle">請登入以繼續使用</div>
 
   <div class="field">
-    <label>帳號</label>
+    <label for="username">帳號</label>
     <input type="text" id="username" placeholder="請輸入帳號" autocomplete="username" autocapitalize="none">
   </div>
 
   <div class="field">
-    <label>密碼</label>
+    <label for="password">密碼</label>
     <input type="password" id="password" placeholder="請輸入密碼" autocomplete="current-password">
   </div>
 
