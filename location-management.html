@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-TW" style="background:#fff;color-scheme:light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>卸存地管理</title>
+<style>
+:root{--blue:#1a7bbf;--red:#c22;--green:#278b52;--text:#111;--muted:#777}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,'PingFang TC','Microsoft JhengHei',sans-serif;background:#fff;color:var(--text);font-size:16px}
+#top{position:sticky;top:0;z-index:10;background:#f2f4f6;border-bottom:2px solid var(--blue);padding:10px 14px}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:8px}.title{font-size:.95rem;font-weight:900;letter-spacing:1px;color:#1a5a8a}
+button{font-family:inherit;cursor:pointer}.topbtn,.btn{border:1px solid rgba(0,0,0,.18);border-radius:7px;padding:8px 11px;background:#fff;color:#333;font-size:.76rem;font-weight:700;white-space:nowrap}
+main{padding:16px 14px 90px;max-width:1000px;margin:auto}.intro{font-size:.76rem;color:#666;line-height:1.6;margin:0 0 12px}
+.toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}.count{font-size:.75rem;color:#666}.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.card{border:1px solid rgba(0,0,0,.13);border-radius:10px;padding:13px 14px;margin-bottom:10px;background:#fff}.cardhead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.code{font-size:.95rem;font-weight:900;color:var(--blue);font-family:ui-monospace,monospace;overflow-wrap:anywhere}.display{font-size:.85rem;font-weight:700;margin-top:4px;line-height:1.5;overflow-wrap:anywhere}.meta{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}.pill{background:#f1f5f8;border-radius:6px;padding:4px 7px;font-size:.68rem;color:#555}.transfer{font-size:.72rem;color:#555;line-height:1.5;margin-top:9px;white-space:pre-wrap;overflow-wrap:anywhere}.actions{display:flex;gap:6px;flex-shrink:0}.edit{color:var(--blue)}.delete{color:var(--red)}.empty{text-align:center;padding:50px 12px;color:#777;font-size:.85rem;line-height:1.8}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:30;align-items:center;justify-content:center;padding:18px}.overlay.show{display:flex}.dialog{width:min(100%,560px);max-height:90vh;overflow:auto;background:#fff;border-radius:12px;padding:20px;box-shadow:0 8px 32px rgba(0,0,0,.2)}.dialog h3{font-size:1rem;margin-bottom:16px}.field{margin-bottom:13px}.field label{display:block;font-size:.73rem;font-weight:800;color:#444;margin-bottom:6px}.field input,.field select,.field textarea{width:100%;border:1.5px solid #ddd;border-radius:8px;padding:10px 11px;font:inherit;font-size:.85rem;background:#fff;color:#111}.field textarea{min-height:88px;resize:vertical;line-height:1.5}.hint{font-size:.66rem;color:#888;margin-top:4px}.error{color:var(--red);font-size:.75rem;min-height:20px}.dlgbuttons{display:flex;gap:8px;margin-top:8px}.dlgbuttons button{flex:1;padding:11px;border-radius:8px;font-weight:800;border:1px solid #ddd;background:#fff}.dlgbuttons .save{background:var(--blue);border-color:var(--blue);color:#fff}.toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,10px);opacity:0;pointer-events:none;background:#222;color:#fff;padding:9px 16px;border-radius:20px;font-size:.76rem;z-index:50;transition:.2s}.toast.show{opacity:1;transform:translate(-50%,0)}
+@media(max-width:520px){.cardhead{flex-wrap:wrap}.actions{width:100%;justify-content:flex-end}.topbtn{padding:7px 9px}}
+</style>
+</head>
+<body>
+<header id="top"><div class="bar"><span class="title">📍 卸存地管理</span><button class="topbtn" onclick="location.href='manifest.html'">← 返回艙單系統</button></div></header>
+<main>
+<p class="intro">管理卸存地名稱、海關分關、紅紙 G19 完整文字及艙單 V16 卸貨方式。內場可新增、修改及刪除；外場僅能查看。</p>
+<div class="toolbar"><span class="count" id="count">載入中…</span><button class="btn primary" id="addBtn" onclick="openEditor()">＋ 新增卸存地</button></div>
+<div id="list"><div class="empty">正在載入卸存地資料…</div></div>
+</main>
+<div class="overlay" id="editor" onclick="if(event.target===this)closeEditor()"><div class="dialog"><h3 id="dialogTitle">新增卸存地</h3>
+<div class="field"><label for="code">卸存地代碼 *</label><input id="code" maxlength="40" placeholder="例如：017A1130"></div>
+<div class="field"><label for="display">卸存地顯示名稱 *</label><input id="display" maxlength="200" placeholder="例如：基隆中華貨櫃"></div>
+<div class="field"><label for="branch">海關分關</label><select id="branch"><option value="">未設定</option><option>高雄關</option><option>台北關</option><option>基隆關</option><option>台中關</option></select></div>
+<div class="field"><label for="g19">紅紙 G19 完整文字</label><textarea id="g19" placeholder="請輸入完整文字，包含括號、空格等內容"></textarea><div class="hint">會依照這裡輸入的完整內容輸出，不會自動改寫。</div></div>
+<div class="field"><label for="method">艙單 V16 卸貨方式</label><input id="method" maxlength="20" value="2" placeholder="例如：1 或 2"></div>
+<div class="error" id="error"></div><div class="dlgbuttons"><button onclick="closeEditor()">取消</button><button class="save" id="saveBtn" onclick="saveLocation()">儲存</button></div>
+</div></div>
+<div class="toast" id="toast"></div>
+<script src="./auth.js"></script><script>
+const SB_URL='https://nvmhdvmwwxsfvhdmopyh.supabase.co';
+const SB_KEY='sb_publishable_xTrQflkrs7S01k1GfFExvw_9RDURAS5';
+const session=CTRAuth.requireRoles(['office','field'],'index.html');
+const canEdit=!!session&&session.role==='office';
+let rows=[],editingCode=null;
+const $=id=>document.getElementById(id);
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function api(path,options={}){const res=await fetch(SB_URL+'/rest/v1/'+path,{...options,headers:{apikey:SB_KEY,'Content-Type':'application/json',...(options.headers||{})}});if(!res.ok){let d=await res.json().catch(()=>({}));throw new Error(d.message||d.details||'資料庫操作失敗（HTTP '+res.status+'）');}if(res.status===204)return null;return res.json();}
+async function load(){try{rows=await api('locations?select=id,location_code,location_display_name,customs_branch,g19_transfer_text,unloading_method&order=location_code.asc');render();}catch(e){$('list').innerHTML='<div class="empty">載入失敗：'+esc(e.message)+'</div>';$('count').textContent='無法載入';}}
+function render(){$('count').textContent='共 '+rows.length+' 筆卸存地';$('addBtn').style.display=canEdit?'':'none';if(!rows.length){$('list').innerHTML='<div class="empty">目前沒有卸存地資料</div>';return;}$('list').innerHTML=rows.map(r=>`<article class="card"><div class="cardhead"><div><div class="code">${esc(r.location_code)}</div><div class="display">${esc(r.location_display_name||'（未設定顯示名稱）')}</div></div>${canEdit?`<div class="actions"><button class="btn edit" onclick="openEditor('${esc(r.location_code)}')">修改</button><button class="btn delete" onclick="removeLocation('${esc(r.location_code)}')">刪除</button></div>`:''}</div><div class="meta"><span class="pill">分關：${esc(r.customs_branch||'未設定')}</span><span class="pill">V16：${esc(r.unloading_method||'未設定')}</span></div>${r.g19_transfer_text?`<div class="transfer">G19：${esc(r.g19_transfer_text)}</div>`:'<div class="transfer">G19：未設定</div>'}</article>`).join('');}
+function openEditor(code=null){if(!canEdit)return;editingCode=code;const r=rows.find(x=>x.location_code===code);$('dialogTitle').textContent=r?'修改卸存地':'新增卸存地';$('code').value=r?.location_code||'';$('code').disabled=!!r;$('display').value=r?.location_display_name||'';$('branch').value=r?.customs_branch||'';$('g19').value=r?.g19_transfer_text||'';$('method').value=r?.unloading_method||'2';$('error').textContent='';$('editor').classList.add('show');setTimeout(()=>$('code').focus(),50);}
+function closeEditor(){$('editor').classList.remove('show');editingCode=null;}
+async function saveLocation(){if(!canEdit)return;const code=$('code').value.trim().toUpperCase(),display=$('display').value.trim();if(!code||!display){$('error').textContent='請填寫卸存地代碼及顯示名稱。';return;}const payload={location_code:code,location_display_name:display,customs_branch:$('branch').value||null,g19_transfer_text:$('g19').value.trim()||null,unloading_method:$('method').value.trim()||'2'};const btn=$('saveBtn');btn.disabled=true;btn.textContent='儲存中…';try{if(editingCode){await api('locations?location_code=eq.'+encodeURIComponent(editingCode),{method:'PATCH',body:JSON.stringify({location_display_name:payload.location_display_name,customs_branch:payload.customs_branch,g19_transfer_text:payload.g19_transfer_text,unloading_method:payload.unloading_method})});}else{await api('locations',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify(payload)});}closeEditor();await load();showToast('卸存地資料已儲存');}catch(e){$('error').textContent=e.message;}finally{btn.disabled=false;btn.textContent='儲存';}}
+async function removeLocation(code){if(!canEdit)return;const r=rows.find(x=>x.location_code===code);if(!confirm('確定刪除卸存地「'+code+'」？\n若仍有收貨人或設定資料引用，資料庫會阻止刪除。'))return;try{await api('locations?location_code=eq.'+encodeURIComponent(code),{method:'DELETE',headers:{Prefer:'return=minimal'}});await load();showToast('已刪除卸存地');}catch(e){alert('刪除失敗：'+e.message);}}
+let toastTimer;function showToast(msg){$('toast').textContent=msg;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('show'),2200);}
+load();
+</script>
+</body></html>
