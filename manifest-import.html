@@ -457,7 +457,7 @@ async function init() {
       fetch(`${SB_URL}/rest/v1/consignees?select=*`, {
         headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
       }),
-      fetch(`${SB_URL}/rest/v1/locations?select=location_code,location_display_name&order=location_code.asc`, {
+      fetch(`${SB_URL}/rest/v1/locations?select=location_code,location_display_name,g19_transfer_text,unloading_method&order=location_code.asc`, {
         headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
       })
     ]);
@@ -543,6 +543,8 @@ function getLocationInputs() {
     return {
       location,
       locationDisplayName: locationMaster ? String(locationMaster.location_display_name || '').trim() : '',
+      g19TransferText: locationMaster ? String(locationMaster.g19_transfer_text || '') : '',
+      unloadingMethod: locationMaster ? String(locationMaster.unloading_method || '2').trim() : '2',
       ship2Name: ship2Input.value.trim()
     };
   }).filter(x => x.location);
@@ -1099,7 +1101,7 @@ function generatePreview() {
 
   const locationCodes = locationList.map(l => normalizeLocationCode(l.location));
   locationList.forEach(l => {
-    manifestByLocation[l.location] = { items: [], ship2Name: l.ship2Name, locationDisplayName: l.locationDisplayName };
+    manifestByLocation[l.location] = { items: [], ship2Name: l.ship2Name, locationDisplayName: l.locationDisplayName, g19TransferText: l.g19TransferText, unloadingMethod: l.unloadingMethod };
   });
 
   // 同一收貨人＋卸存地中，不同台灣通知人仍各自命中正確的 DB 資料；
@@ -1224,7 +1226,10 @@ function generatePreview() {
     const containerType = String(row[kType] || '').trim();
     const mappedType = mapContainerTypeForManifest(containerType);
 
-    const cargoDesc = `EXPRESS PACKAGE  ${intlCode}/${mappedType}/2/${sealNumRaw}`;
+    const cargoDescription = String(match.cargo_description || 'EXPRESS PACKAGE').trim() || 'EXPRESS PACKAGE';
+    const locationMaster = locations.find(x => normalizeLocationCode(x.location_code) === rowLocation);
+    const unloadingMethod = String(locationMaster?.unloading_method || '2').trim() || '2';
+    const cargoDesc = `${cargoDescription}  ${intlCode}/${mappedType}/${unloadingMethod}/${sealNumRaw}`;
     // 艙單收貨人顯示以實際命中的 Supabase DB 名稱為準；
     // 文件上的 LIMITED / DB 的 LINITED 等差異只影響比對，不覆蓋 DB 正式名稱。
     const dbConsigneeName = match.name || consigneeName;
@@ -1233,7 +1238,7 @@ function generatePreview() {
 
     manifestByLocation[rowLocation].items.push({
       billNo, sealNo, pieces, unit,
-      trackNo: intlCode, cargoDesc, weight,
+      trackNo: intlCode, cargoDesc, cargoDescription, unloadingMethod, weight,
       consigneeName,
       // 艙單顯示用的正式收貨人名稱；比對時仍保留 Excel 原始收貨人名稱。
       matchedDbConsigneeName: match.name || '',
@@ -2051,7 +2056,7 @@ async function buildManifestXlsx(loc) {
 
     // F:G 是 Template 原本的公式，不能改成一般文字。
     const formula=`T${row}&"  "&E${row}&"/"&U${row}&"/"&V${row}&"/"&P${row}`;
-    const formulaResult=`EXPRESS PACKAGE  ${it.trackNo || ''}/${it.mappedType || ''}/2/${it.sealNumRaw || ''}`;
+    const formulaResult=`${it.cargoDescription || 'EXPRESS PACKAGE'}  ${it.trackNo || ''}/${it.mappedType || ''}/${it.unloadingMethod || '2'}/${it.sealNumRaw || ''}`;
     api.setFormula(`F${row}`,`=${formula}`,formulaResult);
 
     api.setValue(`H${row}`,`R:${loc}\nT:KNH0010W\nL:CNXMN`);
@@ -2063,7 +2068,7 @@ async function buildManifestXlsx(loc) {
 
     // N~V 依最新範本的欄位定義：
     // N=(1)、O=收貨人名稱(英文)、P=封條、Q=台灣通知人、
-    // R=統一編號、S=收貨人中文簡稱、T=EXPRESS PACKAGE、U=櫃型、V=2。
+    // R=統一編號、S=收貨人中文簡稱、T=收貨人設定貨名、U=櫃型、V=卸存地設定裝卸方式。
     api.setValue(`N${row}`,it.remark || '(1)');
     // O 欄顯示 Supabase 實際收貨人名稱，避免文件中的 LIMITED 拼法
     // 蓋掉資料庫既有的正確 LINITED 名稱；比對邏輯本身不變。
@@ -2087,9 +2092,10 @@ async function buildManifestXlsx(loc) {
     }
 
     api.setValue(`S${row}`,it.shortName || '');
-    api.setValue(`T${row}`,'EXPRESS PACKAGE');
+    api.setValue(`T${row}`,it.cargoDescription || 'EXPRESS PACKAGE');
     api.setValue(`U${row}`,it.mappedType);
-    api.setValue(`V${row}`,2);
+    const unloadingMethodValue = String(it.unloadingMethod || '2').trim();
+    api.setValue(`V${row}`, /^\d+(?:\.\d+)?$/.test(unloadingMethodValue) ? Number(unloadingMethodValue) : unloadingMethodValue);
   });
 
   // 合計列：保留「公式」而不是把公式覆蓋成固定數字。
@@ -2305,29 +2311,11 @@ async function buildManifestXlsx(loc) {
   // 紅紙 G19:I19（Template 的實際合併範圍；使用左上角 G19）：
   // 依網站目前選擇／輸入的卸存地，更新「10.其他」的轉運說明。
   // T6（003C2002、003C2031）不加括號，直接帶入卸存地。
-  const redOtherText = (() => {
-    const normalizedLoc = normalizeLocationCode(loc);
-    const transferPortMap = {
-      'KHH0638S': '轉運至高雄港',
-      'KHH0641S': '轉運至高雄港',
-      'TPEE011S': '轉運至台北港',
-      'TPEE021S': '轉運至台北港',
-      'TPEN051S': '轉運至台北港',
-      'TXG018DH': '轉運至台中港'
-    };
-
-    if (['003C2002', '003C2031'].includes(normalizedLoc)) {
-      return `10.其他:過境台北港辦理儀檢後運往${normalizedLoc}`;
-    }
-
-    const transferPort = transferPortMap[normalizedLoc];
-    if (transferPort) {
-      return `10.其他:${transferPort}(${normalizedLoc} )`;
-    }
-
-    // 未列入對照表的卸存地先維持 Template 原本內容，避免影響既有功能。
-    return '';
-  })();
+  const locationSettings = manifestByLocation[loc] || {};
+  const redOtherText = String(locationSettings.g19TransferText || '').trim()
+    || (['003C2002', '003C2031'].includes(normalizeLocationCode(loc))
+      ? `10.其他:過境台北港辦理儀檢後運往${normalizeLocationCode(loc)}`
+      : '');
   if (redOtherText) red.api.setValue('G19', redOtherText);
 
   // 逐筆確認准單（紅紙）22列起的公式，完全按照 Template 原本公式模式，

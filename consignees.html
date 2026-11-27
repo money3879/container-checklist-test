@@ -293,6 +293,10 @@ main { padding:16px; padding-bottom:90px }
       <input type="text" id="nc-taiwan-notify" placeholder="若與收貨人相同，請填收貨人名稱">
       <div class="field-hint">資料庫儲存實際名稱；艙單顯示時若與收貨人相同會自動顯示 SAME AS CONSIGNEE</div>
     </div><div class="field">
+      <label>貨名（艙單 T16）</label>
+      <input type="text" id="nc-cargo-description" value="EXPRESS PACKAGE" placeholder="預設：EXPRESS PACKAGE">
+      <div class="field-hint">此設定套用於這個收貨人的所有卸存地；未修改時使用 EXPRESS PACKAGE</div>
+    </div><div class="field">
       <label>艙號起始值 *</label>
       <input type="text" id="nc-seal" inputmode="text" maxlength="4" placeholder="例如 5501、JW01、PP01">
       <div class="field-hint">系統會依提單號順序，從這個號碼開始遞增</div>
@@ -358,6 +362,12 @@ main { padding:16px; padding-bottom:90px }
       <input type="text" id="ec-shortname" placeholder="例如：捷豐">
     </div>
 
+    <div class="field">
+      <label>貨名（艙單 T16）</label>
+      <input type="text" id="ec-cargo-description" placeholder="預設：EXPRESS PACKAGE">
+      <div class="field-hint">此設定套用於這個收貨人的所有卸存地；未修改時使用 EXPRESS PACKAGE</div>
+    </div>
+
     <div class="dlg-error" id="ec-error"></div>
 
     <div class="dlg-btns">
@@ -421,7 +431,7 @@ main { padding:16px; padding-bottom:90px }
 <div class="dlg-overlay" id="dlg-import-consignees">
   <div class="dlg-box import-dlg-box">
     <h3>匯入多筆收貨人</h3>
-    <div class="import-hint">Excel 第一列欄位必須為：收貨人英文名稱／收貨人中文名稱／收貨人中文簡稱／統編／聯絡人資訊／英文地址／台灣通知人／艙號起始值／卸存地／件數單位</div>
+    <div class="import-hint">Excel 第一列必須包含：收貨人英文名稱／收貨人中文名稱／收貨人中文簡稱／統編／聯絡人資訊／英文地址／台灣通知人／艙號起始值／卸存地／件數單位。可另外加入「貨名（艙單 T16）」欄位；未填時預設 EXPRESS PACKAGE。</div>
 
     <div class="consignee-dropzone" id="consignee-dropzone"
       onclick="document.getElementById('consignee-excel-file').click()"
@@ -510,6 +520,7 @@ function groupData() {
     map[location].rows.push({
       id:r.id, name:r.name||'', chineseName:r.chinese_name||'', address:r.address||'',
       taxId:r.tax_id||'', contactInfo:r.contact_info||'', shortName:r.short_name||'', taiwanNotifyName:r.taiwan_notify_name||'',
+      cargoDescription:r.cargo_description||'EXPRESS PACKAGE',
       seal_start:String(r.seal_start||'').trim(), unit:r.unit||'PKG'
     });
   });
@@ -540,6 +551,7 @@ function render() {
             ${r.taiwan_notify_name?`<div class="consignee-en">台灣通知人：${escapeHtml(r.taiwan_notify_name)}</div>`:''}
             <div class="consignee-meta name-consignee-meta">
               ${r.short_name?`<span>簡稱：<b>${escapeHtml(r.short_name)}</b></span>`:''}
+              <span>艙單貨名：<b>${escapeHtml(r.cargo_description||'EXPRESS PACKAGE')}</b></span>
               ${r.tax_id?`<span>統編：<b>${escapeHtml(r.tax_id)}</b></span>`:''}
               ${r.contact_info?`<span>聯絡人：<b>${escapeHtml(r.contact_info).replace(/\n/g,' / ')}</b></span>`:''}
             </div>
@@ -570,6 +582,7 @@ function render() {
     ${expanded ? g.rows.map(r=>`<div class="loc-row"><div class="loc-info">
       <div class="consignee-mini">${escapeHtml(r.chineseName||r.name)}</div>
       <div class="consignee-en">英文名稱：${escapeHtml(r.name)}</div>
+      <div class="consignee-en">艙單貨名：${escapeHtml(r.cargoDescription||'EXPRESS PACKAGE')}</div>
       ${r.taiwanNotifyName?`<div class="consignee-en">台灣通知人：${escapeHtml(r.taiwanNotifyName)}</div>`:''}
       <div class="consignee-meta"><span class="seal-badge">艙號 ${escapeHtml(String(r.seal_start))}</span>
         <span>單位：<b>${escapeHtml(r.unit)}</b></span>
@@ -614,6 +627,7 @@ function openAddConsignee() {
   document.getElementById('nc-taxid').value = '';
   document.getElementById('nc-contact').value = '';
   document.getElementById('nc-shortname').value = '';
+  document.getElementById('nc-cargo-description').value = 'EXPRESS PACKAGE';
   document.getElementById('nc-location').value = '';
   document.getElementById('nc-seal').value = '';
   document.getElementById('nc-unit').value = 'PKG';
@@ -629,6 +643,7 @@ async function submitNewConsignee() {
   const taxId = document.getElementById('nc-taxid').value.trim();
   const contactInfo = document.getElementById('nc-contact').value.trim();
   const shortName = document.getElementById('nc-shortname').value.trim();
+  const cargoDescription = document.getElementById('nc-cargo-description').value.trim() || 'EXPRESS PACKAGE';
   const location = document.getElementById('nc-location').value.trim().toUpperCase();
   const seal = document.getElementById('nc-seal').value.trim();
   const unit = document.getElementById('nc-unit').value;
@@ -650,7 +665,7 @@ async function submitNewConsignee() {
         'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY,
         'Content-Type': 'application/json', 'Prefer': 'return=minimal'
       },
-      body: JSON.stringify({ name, chinese_name: chineseName, address, taiwan_notify_name: taiwanNotifyName || name, tax_id: taxId, contact_info: contactInfo, short_name: shortName, location, seal_start: seal, unit })
+      body: JSON.stringify({ name, chinese_name: chineseName, address, taiwan_notify_name: taiwanNotifyName || name, tax_id: taxId, contact_info: contactInfo, short_name: shortName, cargo_description: cargoDescription, location, seal_start: seal, unit })
     });
     if (!res.ok) {
       const errText = await res.text();
@@ -683,6 +698,7 @@ function openEditConsignee(name) {
   document.getElementById('ec-taxid').value = row.tax_id || '';
   document.getElementById('ec-contact').value = row.contact_info || '';
   document.getElementById('ec-shortname').value = row.short_name || '';
+  document.getElementById('ec-cargo-description').value = row.cargo_description || 'EXPRESS PACKAGE';
   document.getElementById('ec-error').textContent = '';
   document.getElementById('dlg-edit-consignee').classList.add('show');
 }
@@ -695,6 +711,7 @@ async function submitEditConsignee() {
   const newTaxId = document.getElementById('ec-taxid').value.trim();
   const newContact = document.getElementById('ec-contact').value.trim();
   const newShortName = document.getElementById('ec-shortname').value.trim();
+  const newCargoDescription = document.getElementById('ec-cargo-description').value.trim() || 'EXPRESS PACKAGE';
   const errEl = document.getElementById('ec-error');
   const btnEl = document.getElementById('ec-submit');
 
@@ -714,7 +731,7 @@ async function submitEditConsignee() {
           'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY,
           'Content-Type': 'application/json', 'Prefer': 'return=minimal'
         },
-        body: JSON.stringify({ name: newName, chinese_name: newChineseName, address: newAddress, taiwan_notify_name: newTaiwanNotifyName, tax_id: newTaxId, contact_info: newContact, short_name: newShortName })
+        body: JSON.stringify({ name: newName, chinese_name: newChineseName, address: newAddress, taiwan_notify_name: newTaiwanNotifyName, tax_id: newTaxId, contact_info: newContact, short_name: newShortName, cargo_description: newCargoDescription })
       });
       if (!res.ok) throw new Error(await res.text());
     }
@@ -804,7 +821,8 @@ async function submitLocation() {
         body: JSON.stringify({
           name: base.name || '', chinese_name: base.chinese_name || '', address: base.address || '',
           tax_id: base.tax_id || '', contact_info: base.contact_info || '',
-          short_name: base.short_name || '', taiwan_notify_name: taiwanNotifyName, location, seal_start: seal, unit
+          short_name: base.short_name || '', taiwan_notify_name: taiwanNotifyName,
+          cargo_description: base.cargo_description || 'EXPRESS PACKAGE', location, seal_start: seal, unit
         })
       });
       if (!res.ok) {
@@ -914,16 +932,18 @@ function handleConsigneeImportFile(file){
         seal_start:String(r['艙號起始值']??'').trim(),
         location:String(r['卸存地']??'').trim().toUpperCase(),
         unit:String(r['件數單位']??'PKG').trim().toUpperCase()||'PKG',
+        cargo_description:String(r['貨名（艙單 T16）']??r['貨名']??'EXPRESS PACKAGE').trim()||'EXPRESS PACKAGE',
         _row:i+2
       }));
       importedConsigneeRows.forEach(r=>{ if(!r.taiwan_notify_name) r.taiwan_notify_name=r.name; });
       const bad=importedConsigneeRows.findIndex(r=>!r.name||!r.location||!isValidSealStart(r.seal_start)||!['PKG','CTN'].includes(r.unit));
       if(bad>=0)throw new Error(`第 ${bad+2} 列資料不完整：英文名稱、卸存地、艙號起始值、件數單位請檢查`);
       status.textContent=`已讀取 ${importedConsigneeRows.length} 筆，可按「開始匯入」寫入 Supabase`;
-      preview.innerHTML='<table><thead><tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>'+importedConsigneeRows.slice(0,10).map(r=>`<tr>
+      const previewCols=[...cols,'貨名（艙單 T16）'];
+      preview.innerHTML='<table><thead><tr>'+previewCols.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>'+importedConsigneeRows.slice(0,10).map(r=>`<tr>
         <td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.chinese_name)}</td><td>${escapeHtml(r.short_name)}</td>
         <td>${escapeHtml(r.tax_id)}</td><td>${escapeHtml(r.contact_info)}</td><td>${escapeHtml(r.address)}</td><td>${escapeHtml(r.taiwan_notify_name)}</td>
-        <td>${escapeHtml(String(r.seal_start))}</td><td>${escapeHtml(r.location)}</td><td>${escapeHtml(r.unit)}</td></tr>`).join('')+'</tbody></table>';
+        <td>${escapeHtml(String(r.seal_start))}</td><td>${escapeHtml(r.location)}</td><td>${escapeHtml(r.unit)}</td><td>${escapeHtml(r.cargo_description)}</td></tr>`).join('')+'</tbody></table>';
       submit.disabled=false;
     }catch(e){ importedConsigneeRows=[]; loaded.classList.remove('show'); status.textContent=''; err.textContent='讀取失敗：'+(e.message||e); }
   })();
